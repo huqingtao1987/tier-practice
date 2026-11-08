@@ -99,7 +99,7 @@ footer{text-align:center;font-size:12px;color:var(--mute);padding:18px 12px}
       <summary style="cursor:pointer;font-size:14px;color:var(--blue)">生成新一批</summary>
       <div class="row" style="margin-top:10px">
         <label>篇数<input id="n" type="number" inputmode="numeric" value="10" min="1" max="30"></label>
-        <label>回溯天数<input id="days" type="number" inputmode="numeric" value="365" min="30"></label>
+        <label>回溯天数<input id="days" type="number" inputmode="numeric" value="1825" min="30"></label>
         <label>随机种子<input id="seed" type="number" inputmode="numeric" value="0"></label>
       </div>
       <div class="btns"><button id="gen">生成</button></div>
@@ -296,7 +296,7 @@ function pickPapers(cands, n, rng){
 
 async function generate(){
   const n = Math.max(1, Math.min(30, +$('#n').value || 10));
-  const days = Math.max(30, +$('#days').value || 365);
+  const days = Math.max(30, +$('#days').value || 1825);
   const seed = +$('#seed').value || 0;
   const rng = seed ? mulberry32(seed) : Math.random;
   const log = m => { $('#genlog').textContent = m; };
