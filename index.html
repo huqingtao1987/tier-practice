@@ -1,0 +1,820 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>文章档位判断</title>
+<meta name="theme-color" content="#1f4e79">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="档位判断">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{
+  --ink:#1c2128; --mute:#6b7785; --line:#e3e8ee; --bg:#f6f8fa;
+  --blue:#1f4e79; --blue2:#2f6fa8; --ok:#1a7f4b; --warn:#b45309; --bad:#a11b1b;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{font:15px/1.65 -apple-system,"PingFang SC","Helvetica Neue",Arial,sans-serif;color:var(--ink);background:var(--bg);
+  padding-bottom:calc(28px + env(safe-area-inset-bottom))}
+header{position:sticky;top:0;z-index:9;background:#fff;border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top)}
+header h1{margin:0;padding:10px 16px 6px;font-size:16px;font-weight:600;color:var(--blue)}
+nav{display:flex;gap:2px;padding:0 8px}
+nav button{flex:1;border:0;background:none;padding:10px 4px;font-size:14px;color:var(--mute);border-bottom:2px solid transparent;font-family:inherit}
+nav button.on{color:var(--blue);border-bottom-color:var(--blue);font-weight:600}
+main{padding:12px 14px}
+.tab{display:none}.tab.on{display:block}
+.card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+.hidden{display:none!important}
+.lab{display:block;margin:14px 0 6px;font-size:13px;color:var(--mute)}
+textarea,input,select{width:100%;font:inherit;color:inherit;background:#fff;border:1px solid var(--line);border-radius:8px;padding:9px 10px}
+textarea{resize:vertical;line-height:1.55}
+button{font-family:inherit;font-size:15px;border-radius:9px;border:1px solid var(--blue);background:var(--blue);color:#fff;padding:11px 16px;cursor:pointer}
+button:disabled{opacity:.45}
+button.ghost{background:#fff;color:var(--blue)}
+button.small{padding:7px 11px;font-size:13px}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.row>label{flex:1 1 90px;font-size:13px;color:var(--mute)}
+.row input{margin-top:4px}
+.note{font-size:12px;color:var(--mute);margin-top:8px;min-height:16px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chips button{background:#fff;color:var(--ink);border:1px solid var(--line);padding:9px 13px;font-size:14px}
+.chips button.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+.knob{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.knob span{width:74px;font-size:13px;color:var(--mute)}
+.knob .dots{display:flex;gap:6px}
+.knob .dots button{width:34px;height:34px;padding:0;font-size:13px;background:#fff;color:var(--mute);border:1px solid var(--line)}
+.knob .dots button.on{background:var(--blue2);color:#fff;border-color:var(--blue2)}
+h2{font-size:17px;line-height:1.45;margin:6px 0 10px}
+.abs{font-size:14px;line-height:1.7;color:#2b3440;white-space:pre-wrap}
+.qmeta{font-size:12px;color:var(--mute)}
+.btns{display:flex;gap:10px;margin-top:16px}
+.btns button{flex:1}
+.verdict{font-size:15px;font-weight:600;padding:10px 12px;border-radius:9px;margin-bottom:10px}
+.verdict.ok{background:#e9f6ee;color:var(--ok)}
+.verdict.under{background:#eaf2fb;color:var(--blue2)}
+.verdict.over{background:#fdf1e7;color:var(--warn)}
+.revj{font-size:14px;color:var(--mute);margin-bottom:12px}
+.box{background:#f8fafc;border:1px solid var(--line);border-radius:9px;padding:11px;margin-top:10px}
+.box .bt{font-size:12px;color:var(--blue);font-weight:600;margin-bottom:6px;letter-spacing:.4px}
+.box .ln{margin:4px 0;font-size:14px}
+.axisline{display:flex;gap:6px;font-size:13px;margin:3px 0;align-items:baseline}
+.badge{font-size:11px;padding:1px 6px;border-radius:20px;border:1px solid var(--line);color:var(--mute)}
+.badge.hi{color:var(--warn);border-color:#f0d3b4;background:#fdf4ea}
+.badge.lo{color:var(--blue2);border-color:#cfe0f2;background:#eef5fc}
+.badge.eq{color:var(--ok);border-color:#cbe7d6;background:#eef9f2}
+.hrow{display:flex;gap:8px;align-items:center;padding:11px 4px;border-bottom:1px solid var(--line);cursor:pointer;font-size:14px}
+.hrow .m{color:var(--mute);font-size:12px}
+.hdetail{padding:10px 4px 16px;border-bottom:1px solid var(--line);font-size:14px}
+.dmeta{font-size:12px;color:var(--mute);margin-bottom:6px}
+.dclaim{background:#f8fafc;border:1px dashed var(--line);border-radius:8px;padding:8px 10px;margin:8px 0;font-size:13px}
+table.mtx{border-collapse:collapse;font-size:13px;width:100%}
+table.mtx th,table.mtx td{border:1px solid #dfe5ec;text-align:center;padding:7px 4px}
+table.mtx th{background:#f2f6fa;font-weight:500;color:var(--mute)}
+.diag{outline:2px solid var(--blue2);outline-offset:-2px}
+.trend{display:flex;align-items:flex-end;gap:10px;height:90px;margin-top:10px}
+.trend div{flex:1;background:#cfe0f2;border-radius:4px 4px 0 0;position:relative;min-height:2px}
+.trend span{position:absolute;top:-17px;left:0;right:0;text-align:center;font-size:11px;color:var(--mute)}
+.warnbox{background:#fff8ec;border:1px solid #f2d9b0;border-radius:9px;padding:10px;font-size:13px;color:#7a5212;margin-bottom:12px}
+footer{text-align:center;font-size:12px;color:var(--mute);padding:18px 12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>文章档位判断</h1>
+  <nav id="tabs">
+    <button data-tab="practice" class="on">练习</button>
+    <button data-tab="history">历史</button>
+    <button data-tab="stats">分析</button>
+    <button data-tab="settings">设置</button>
+  </nav>
+</header>
+
+<main>
+<!-- 练习 -->
+<section id="practice" class="tab on">
+  <div class="card">
+    <details id="genpanel">
+      <summary style="cursor:pointer;font-size:14px;color:var(--blue)">生成新一批</summary>
+      <div class="row" style="margin-top:10px">
+        <label>篇数<input id="n" type="number" inputmode="numeric" value="10" min="1" max="30"></label>
+        <label>回溯天数<input id="days" type="number" inputmode="numeric" value="365" min="30"></label>
+        <label>随机种子<input id="seed" type="number" inputmode="numeric" value="0"></label>
+      </div>
+      <div class="btns"><button id="gen">生成</button></div>
+      <div id="genlog" class="note"></div>
+    </details>
+    <div style="margin-top:12px">
+      <label class="lab" style="margin-top:0">当前批次</label>
+      <select id="batchsel"></select>
+    </div>
+  </div>
+
+  <div id="empty" class="card hidden">
+    <div style="color:var(--mute);font-size:14px">还没有题目。点上面的「生成新一批」。</div>
+  </div>
+
+  <div id="qcard" class="card hidden">
+    <div class="qmeta" id="qidx"></div>
+    <h2 id="qtitle"></h2>
+    <div class="abs" id="qabs"></div>
+
+    <label class="lab">主张句（可选）——写成一句可被反对的话</label>
+    <textarea id="claim" rows="2" placeholder="例：X通过Z使Y发生变化"></textarea>
+    <div class="lab">主张类型（可选）</div>
+    <div id="typesel" class="chips"></div>
+
+    <div class="lab">你判断的档位（必填）</div>
+    <div id="tiers" class="chips"></div>
+
+    <div class="lab">三轴（可选）</div>
+    <div id="knobs"></div>
+
+    <label class="lab">一句话依据（可选）</label>
+    <textarea id="basis" rows="2"></textarea>
+
+    <div class="btns"><button id="submit" disabled>提交并查看答案</button><button id="skip" class="ghost">跳过</button></div>
+  </div>
+
+  <div id="reveal" class="card hidden">
+    <div id="verdict" class="verdict"></div>
+    <div id="revj" class="revj"></div>
+    <div id="aibox" class="box hidden"></div>
+    <div id="coachbox" class="box hidden"></div>
+    <div class="btns"><button id="next">下一题</button></div>
+  </div>
+</section>
+
+<!-- 历史 -->
+<section id="history" class="tab">
+  <div id="hsum" class="card" style="font-size:14px"></div>
+  <div class="card" style="padding:4px 12px">
+    <div id="hlist"></div>
+  </div>
+</section>
+
+<!-- 分析 -->
+<section id="stats" class="tab">
+  <div class="card">
+    <button id="anbtn">分析我的判断</button>
+    <div id="anpanel" style="margin-top:14px"></div>
+  </div>
+</section>
+
+<!-- 设置 -->
+<section id="settings" class="tab">
+  <div class="card">
+    <div class="lab" style="margin-top:0">AI 密钥（只存在本机浏览器）</div>
+    <input id="apikey" type="password" autocomplete="off" placeholder="sk-...">
+    <div class="warnbox" style="margin-top:10px">密钥保存在本机浏览器的localStorage里。任何能解锁这台手机的人、或装了的浏览器扩展都能读到。建议单独申请一个限额key，不要用主账号的。</div>
+    <label class="lab">API 地址</label>
+    <input id="aibase" type="text" placeholder="https://api.deepseek.com/v1">
+    <label class="lab">模型</label>
+    <input id="aimodel" type="text" placeholder="deepseek-chat">
+    <div class="btns"><button id="savecfg">保存</button></div>
+    <div id="cfglog" class="note"></div>
+  </div>
+
+  <div class="card">
+    <div class="lab" style="margin-top:0">数据</div>
+    <div class="btns" style="margin-top:0"><button id="exportbtn" class="ghost small">导出JSON</button><button id="importbtn" class="ghost small">导入JSON</button></div>
+    <input id="importfile" type="file" accept="application/json,.json" class="hidden">
+    <div id="datalog" class="note"></div>
+  </div>
+
+  <div class="card" style="font-size:13px;color:var(--mute)">
+    档位口径：1=CNS；2=IF&gt;20；3=IF10–20；4=IF5–10。数字越小刊越好。<br>
+    三轴：创新性＝与领域默认答案的距离；重要性＝受众面；证据强度＝因果链闭合度。按最弱项定档。
+  </div>
+</section>
+</main>
+
+<footer>本机运行 · 数据只存在这台设备</footer>
+
+<script>
+/* ========== 基础 ========== */
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const KEY = 'tp.v1';
+const TYPES = ['描述','关联','因果','机制','规则·原则','资源·方法'];
+const BAD_TYPES = new Set(['Review','Comment','Editorial','News','Letter','Case Reports',
+  'Published Erratum','Preprint','Retraction of Publication','Retracted Publication']);
+const MIN_ABSTRACT = 600;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+const blank = () => ({v:1, batches:[], answers:[], judgments:{}, coach:{}, last:'',
+  settings:{key:'', base:'https://api.deepseek.com/v1', model:'deepseek-chat'}});
+
+function load(){
+  try{
+    const d = JSON.parse(localStorage.getItem(KEY));
+    return (d && d.v) ? Object.assign(blank(), d) : blank();
+  }catch(e){ return blank(); }
+}
+let S = load();
+function persist(){
+  try{ localStorage.setItem(KEY, JSON.stringify(S)); }
+  catch(e){ alert('本地存储写入失败，可能已满。请在设置里导出后清理。'); }
+}
+function esc(s){ return String(s == null ? '' : s); }
+
+/* ========== 标签页 ========== */
+$$('#tabs button').forEach(b => b.onclick = () => showTab(b.dataset.tab));
+function showTab(t){
+  $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  $$('main .tab').forEach(s => s.classList.toggle('on', s.id === t));
+  if(t === 'history') renderHistory();
+  if(t === 'stats') renderStats();
+  if(t === 'settings') renderSettings();
+}
+
+/* ========== 生成 ========== */
+const mulberry32 = a => () => {
+  a |= 0; a = a + 0x6D2B79F5 | 0;
+  let t = Math.imul(a ^ a >>> 15, 1 | a);
+  t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+  return ((t ^ t >>> 14) >>> 0) / 4294967296;
+};
+function shuffle(a, rng){
+  for(let i = a.length - 1; i > 0; i--){
+    const j = Math.floor(rng() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+const ymd = d => d.toISOString().slice(0,10).replace(/-/g,'/');
+
+async function esearch(ta, mindate, maxdate, retmax=10){
+  const url = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json'
+    + '&retmax=' + retmax + '&sort=date&datetype=pdat'
+    + '&mindate=' + encodeURIComponent(mindate) + '&maxdate=' + encodeURIComponent(maxdate)
+    + '&term=' + encodeURIComponent(`"${ta}"[ta]`);
+  const r = await fetch(url);
+  const d = await r.json();
+  return (d.esearchresult && d.esearchresult.idlist) || [];
+}
+
+async function efetch(ids){
+  if(!ids.length) return [];
+  const url = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&id=' + ids.join(',');
+  const r = await fetch(url);
+  const xml = new DOMParser().parseFromString(await r.text(), 'text/xml');
+  const out = [];
+  xml.querySelectorAll('PubmedArticle').forEach(art => {
+    const pmid = (art.querySelector('PMID') || {}).textContent || '';
+    const title = ((art.querySelector('ArticleTitle') || {}).textContent || '').replace(/\s+/g,' ').trim();
+    const abs = [...art.querySelectorAll('AbstractText')].map(e => e.textContent).join(' ').replace(/\s+/g,' ').trim();
+    const jEl = art.querySelector('Journal > ISOAbbreviation') || art.querySelector('Journal > Title');
+    const iso = jEl ? jEl.textContent.trim() : '';
+    const types = [...art.querySelectorAll('PublicationType')].map(e => e.textContent.trim());
+    out.push({pmid, title, abstract: abs, iso, types});
+  });
+  return out;
+}
+
+function pickPapers(cands, n, rng){
+  const byJ = {};
+  cands.forEach(c => { (byJ[c.iso] = byJ[c.iso] || []).push(c); });
+  Object.values(byJ).forEach(a => shuffle(a, rng));
+  const order = Object.keys(byJ).sort((a,b) => byJ[a][0].tier - byJ[b][0].tier);
+  const used = {}, out = [];
+  let guard = 0;
+  while(out.length < n && guard++ < 200){
+    let added = false;
+    for(const iso of order){
+      if(out.length >= n) break;
+      if((used[iso] || 0) >= 2) continue;
+      const arr = byJ[iso];
+      if(!arr.length) continue;
+      out.push(arr.shift()); used[iso] = (used[iso] || 0) + 1; added = true;
+    }
+    if(!added) break;
+  }
+  return out;
+}
+
+async function generate(){
+  const n = Math.max(1, Math.min(30, +$('#n').value || 10));
+  const days = Math.max(30, +$('#days').value || 365);
+  const seed = +$('#seed').value || 0;
+  const rng = seed ? mulberry32(seed) : Math.random;
+  const log = m => { $('#genlog').textContent = m; };
+
+  const cfg = await (await fetch('journals.json')).json();
+  const used = new Set();
+  S.answers.forEach(a => a.pmid && used.add(a.pmid));
+  S.batches.forEach(b => (b.items || []).forEach(i => i.pmid && used.add(i.pmid)));
+
+  const end = new Date(), start = new Date(Date.now() - days * 864e5);
+  const pool = [];
+  let k = 0;
+  for(const j of cfg.journals){
+    k++;
+    log(`正在检索 ${k}/${cfg.journals.length}`);
+    try{
+      let ids = await esearch(j.ta, ymd(start), ymd(end), 12);
+      ids = ids.filter(id => !used.has(id));
+      if(ids.length) pool.push(...ids.slice(0, 6));
+    }catch(e){ /* 单刊失败不影响整体 */ }
+    await sleep(360);
+  }
+  if(!pool.length){ log('没有取到新论文。试试加大回溯天数，或等一段时间。'); return; }
+
+  const recs = [];
+  for(let i = 0; i < pool.length; i += 100){
+    log(`正在取文 ${Math.min(i + 100, pool.length)}/${pool.length}`);
+    try{ recs.push(...await efetch(pool.slice(i, i + 100))); }catch(e){}
+    await sleep(400);
+  }
+
+  const byIso = {};
+  cfg.journals.forEach(j => byIso[j.ta.toLowerCase()] = j);
+  const cands = [];
+  for(const r of recs){
+    if(!r.pmid || !r.title || !r.abstract) continue;
+    if(r.abstract.length < MIN_ABSTRACT) continue;
+    if(r.types.some(t => BAD_TYPES.has(t))) continue;
+    const j = byIso[(r.iso || '').toLowerCase()];
+    if(!j) continue;
+    cands.push({pmid:r.pmid, title:r.title, abstract:r.abstract, iso:j.ta,
+      journal_name:j.name, tier:j.tier, ring:j.ring});
+  }
+  if(!cands.length){ log('取到的论文都被过滤掉了（综述、短摘要等）。加大回溯天数再试。'); return; }
+
+  const picked = pickPapers(cands, n, rng);
+  const now = new Date();
+  const id = now.toISOString().replace(/[-:T]/g,'').slice(0,8) + '_'
+    + now.toTimeString().slice(0,8).replace(/:/g,'');
+  const batch = {id, created: now.toISOString().slice(0,10), items: picked.map((p, i) => ({
+    id: 'P' + String(i + 1).padStart(2,'0'), pmid: p.pmid, title: p.title,
+    abstract: p.abstract, journal_name: p.journal_name, ring: p.ring, tier: p.tier
+  }))};
+  S.batches.unshift(batch);
+  S.last = id;
+  persist();
+  log(`已生成 ${picked.length} 篇（候选 ${cands.length} 篇）。`);
+  $('#genpanel').open = false;
+  renderPractice();
+}
+
+/* ========== 练习 ========== */
+let Q = {idx:0, tier:null, type:'', knobs:{n:0,i:0,e:0}, revealed:false};
+const skipped = new Set();
+
+function curBatch(){
+  return S.batches.find(b => b.id === S.last) || S.batches[0] || null;
+}
+function answered(b, it){
+  return S.answers.some(a => a.batch === b.id && a.id === it.id);
+}
+
+function renderPractice(){
+  const b = curBatch();
+  const sel = $('#batchsel');
+  sel.innerHTML = '';
+  S.batches.forEach(x => {
+    const o = document.createElement('option');
+    o.value = x.id;
+    o.textContent = `${x.created} · ${x.items.length}篇 · 已答 ${S.answers.filter(a => a.batch === x.id).length}`;
+    if(b && x.id === b.id) o.selected = true;
+    sel.appendChild(o);
+  });
+  if(!S.batches.length){ $('#empty').classList.remove('hidden'); $('#qcard').classList.add('hidden'); return; }
+  $('#empty').classList.add('hidden');
+
+  let idx = -1;
+  for(let i = 0; i < b.items.length; i++){
+    const it = b.items[i];
+    if(!answered(b, it) && !skipped.has(b.id + '/' + it.id)){ idx = i; break; }
+  }
+  if(idx < 0){
+    const all = b.items.every(it => answered(b, it));
+    $('#qcard').classList.add('hidden');
+    $('#reveal').classList.remove('hidden');
+    $('#verdict').className = 'verdict ok';
+    $('#verdict').textContent = all ? '本批已全部作答' : '本批剩下的都被跳过了';
+    $('#revj').textContent = '可以生成新一批，或在历史里回看。';
+    $('#aibox').classList.add('hidden'); $('#coachbox').classList.add('hidden');
+    $('#next').classList.add('hidden');
+    return;
+  }
+  Q = {idx, tier:null, type:'', knobs:{n:0,i:0,e:0}, revealed:false};
+  $('#reveal').classList.add('hidden');
+  $('#qcard').classList.remove('hidden');
+  const it = b.items[idx];
+  $('#qidx').textContent = `第 ${idx + 1} / ${b.items.length} 篇`;
+  $('#qtitle').textContent = it.title;
+  $('#qabs').textContent = it.abstract;
+  $('#claim').value = ''; $('#basis').value = '';
+  renderTiers(); renderTypes(); renderKnobs(); refreshSubmit();
+}
+
+function renderTiers(){
+  const box = $('#tiers'); box.innerHTML = '';
+  [1,2,3,4].forEach(t => {
+    const btn = document.createElement('button');
+    btn.textContent = t + '档';
+    if(Q.tier === t) btn.classList.add('on');
+    btn.onclick = () => { Q.tier = (Q.tier === t ? null : t); renderTiers(); refreshSubmit(); };
+    box.appendChild(btn);
+  });
+}
+function renderTypes(){
+  const box = $('#typesel'); box.innerHTML = '';
+  TYPES.forEach(t => {
+    const btn = document.createElement('button');
+    btn.textContent = t;
+    if(Q.type === t) btn.classList.add('on');
+    btn.onclick = () => { Q.type = (Q.type === t ? '' : t); renderTypes(); };
+    box.appendChild(btn);
+  });
+}
+function renderKnobs(){
+  const box = $('#knobs'); box.innerHTML = '';
+  [['n','创新性'],['i','重要性'],['e','证据强度']].forEach(([k, name]) => {
+    const row = document.createElement('div'); row.className = 'knob';
+    const nm = document.createElement('span'); nm.textContent = name; row.appendChild(nm);
+    const dots = document.createElement('div'); dots.className = 'dots';
+    for(let v = 1; v <= 5; v++){
+      const b = document.createElement('button');
+      b.textContent = v;
+      if(Q.knobs[k] === v) b.classList.add('on');
+      b.onclick = () => { Q.knobs[k] = (Q.knobs[k] === v ? 0 : v); renderKnobs(); };
+      dots.appendChild(b);
+    }
+    row.appendChild(dots); box.appendChild(row);
+  });
+}
+function refreshSubmit(){ $('#submit').disabled = !Q.tier; }
+
+/* ========== 提交 ========== */
+function submitAnswer(){
+  const b = curBatch(), it = b.items[Q.idx];
+  if(!Q.tier) return;
+  const rec = {
+    date: new Date().toISOString().slice(0,10),
+    batch: b.id, id: it.id, pmid: it.pmid, title: it.title, abstract: it.abstract,
+    journal: it.journal_name, ring: it.ring, actual_tier: it.tier,
+    pred_tier: Q.tier, delta: Q.tier - it.tier,
+    novelty: Q.knobs.n, importance: Q.knobs.i, evidence: Q.knobs.e,
+    basis: $('#basis').value.trim(),
+    claim_type: Q.type, claim_sentence: $('#claim').value.trim()
+  };
+  if(answered(b, it)) return;
+  S.answers.push(rec); persist();
+  showReveal(rec, it);
+  loadAI(it).then(() => renderAI(it)).catch(e => renderAIError(it, e));
+  loadCoach(rec, it).then(() => renderCoach(rec)).catch(e => renderCoachError(rec, e));
+}
+
+function showReveal(rec, it){
+  $('#qcard').classList.add('hidden');
+  $('#reveal').classList.remove('hidden');
+  $('#next').classList.remove('hidden');
+  const d = rec.delta;
+  let cls = 'ok', txt = '完全命中';
+  if(d > 0){ cls = 'under'; txt = `低估 ${d} 档`; }
+  if(d < 0){ cls = 'over'; txt = `高估 ${-d} 档`; }
+  $('#verdict').className = 'verdict ' + cls;
+  $('#verdict').textContent = `${txt}（你判 ${rec.pred_tier} 档）`;
+  $('#revj').textContent = `实际：${it.journal_name}（${it.tier} 档 · ${it.ring}）`;
+  ['#aibox','#coachbox'].forEach(s => { $(s).classList.add('hidden'); $(s).innerHTML = ''; });
+}
+
+$('#next').onclick = () => renderPractice();
+$('#batchsel').onchange = e => { S.last = e.target.value; persist(); renderPractice(); };
+$('#gen').onclick = async () => {
+  const btn = $('#gen'); btn.disabled = true;
+  try{ await generate(); }
+  catch(e){ $('#genlog').textContent = '生成失败：' + (e.message || e); }
+  finally{ btn.disabled = false; }
+};
+$('#submit').onclick = submitAnswer;
+$('#skip').onclick = () => {
+  const b = curBatch(); const it = b.items[Q.idx];
+  skipped.add(b.id + '/' + it.id);
+  renderPractice();
+};
+
+/* ========== AI ========== */
+const AI_SYS = '你是生命科学期刊的资深编辑。只根据给出的标题和摘要，判断这篇论文的学术份量。'
+ + '不要推测、也不要回忆它实际发表在哪个期刊；只依据文本本身。\n'
+ + '三个维度，各1–5分：\n'
+ + '创新性 novelty：结论与该领域默认答案的距离。1=基本重复已知；3=已知框架下的新证据；5=改写领域默认答案。\n'
+ + '重要性 importance：受众面。1=小众技术细节；3=本领域同行关注；5=跨领域广泛关注。\n'
+ + '证据强度 evidence：因果链闭合度。1=相关性或单一模型；3=多层面互证但缺体内因果；5=判决性证据齐备。\n'
+ + 'tier：按三项中最弱的一项定档（木桶原理）。1=CNS；2=IF>20；3=IF10–20；4=IF5–10。\n'
+ + '只输出严格JSON，不要代码块：'
+ + '{"novelty":整数,"importance":整数,"evidence":整数,"tier":整数,'
+ + '"basis":"一句中文，不超过60字，指出承重的是哪个维度、关键理由是什么"}';
+
+const COACH_SYS = '你是科研写作与投稿判断的教练。用户看到一篇论文的标题和摘要，先自己判断了发表档位，'
+ + '现在答案已揭晓。你的任务是评价他的这次判断，帮他找到偏差原因，而不是夸他。\n'
+ + '档位口径：1=CNS；2=IF>20；3=IF10–20；4=IF5–10。数字越小刊越好。\n'
+ + '三个维度各1–5分：创新性=结论与该领域默认答案的距离；重要性=受众面；证据强度=因果链闭合度。\n'
+ + '评价规则：\n'
+ + '1. 只依据标题、摘要、用户的判断和实际档位。不要假装看过全文或图。信息不足时直接说明。\n'
+ + '2. 实际档位是事实锚点，但单篇受编辑偏好、时机、运气影响；若实际档位与摘要水平明显不匹配，要点明。\n'
+ + '3. 重点回答：他偏差在哪一轴？是读不出关键证据，还是高估了新颖性，还是受众判断错了？\n'
+ + '4. 评价他写的一句话依据：是否指向承重证据，还是只重复了摘要卖点。不要评文笔。\n'
+ + '5. 若写了主张句或选了主张类型，评价：主张句能否被反对、量词是否与证据匹配；类型是否选对'
+ + '（如摘要只支持关联却判成机制）。类型口径：描述/关联/因果/机制/规则·原则/资源·方法。未填写就写未填写。\n'
+ + '6. 不要虚构论文细节；不确定的地方说不确定。\n'
+ + '只输出严格JSON，不要代码块：\n'
+ + '{"headline":"一句话结论，指出偏差方向与主因",'
+ + '"why_tier":"2–4句：为什么这次判成X档而实际是Y档",'
+ + '"axes":[{"axis":"创新性","yours":整数或null,"ai":整数,"verdict":"判高/判低/接近/未填","comment":"1–2句"},'
+ + '{"axis":"重要性",...},{"axis":"证据强度",...}],'
+ + '"basis_review":"2–4句：依据抓住了什么、漏了什么",'
+ + '"claim_review":"2–4句：主张句能否被反对、类型是否选对",'
+ + '"rule":"一条可迁移的判断规则，25字以内"}';
+
+async function chatJSON(system, user){
+  const st = S.settings;
+  if(!st.key) throw new Error('未配置AI密钥（设置页填写）');
+  const base = (st.base || 'https://api.deepseek.com/v1').replace(/\/+$/,'');
+  const r = await fetch(base + '/chat/completions', {
+    method:'POST',
+    headers:{'Content-Type':'application/json', 'Authorization':'Bearer ' + st.key},
+    body: JSON.stringify({
+      model: st.model || 'deepseek-chat',
+      messages:[{role:'system', content:system},{role:'user', content:user}],
+      temperature: 0.2,
+      response_format: {type:'json_object'}
+    })
+  });
+  if(!r.ok) throw new Error('AI请求失败 HTTP ' + r.status);
+  const d = await r.json();
+  let t = (d.choices && d.choices[0] && d.choices[0].message.content || '').trim();
+  t = t.replace(/^```(?:json)?/i,'').replace(/```$/,'').trim();
+  try{ return JSON.parse(t); }
+  catch(e){ const m = t.match(/\{[\s\S]*\}/); if(m) return JSON.parse(m[0]); throw new Error('AI返回无法解析'); }
+}
+
+function clamp(v, lo, hi, dflt){
+  v = parseInt(v, 10);
+  if(isNaN(v)) return dflt;
+  return Math.max(lo, Math.min(hi, v));
+}
+function s(x, n){ return String(x == null ? '' : x).slice(0, n); }
+
+async function loadAI(paper){
+  if(S.judgments[paper.pmid]) return S.judgments[paper.pmid];
+  const out = await chatJSON(AI_SYS, '标题：' + paper.title + '\n摘要：' + paper.abstract);
+  const j = {
+    novelty: clamp(out.novelty,1,5,3), importance: clamp(out.importance,1,5,3),
+    evidence: clamp(out.evidence,1,5,3), tier: clamp(out.tier,1,4,3),
+    basis: s(out.basis, 200)
+  };
+  S.judgments[paper.pmid] = j; persist();
+  return j;
+}
+
+function renderAI(paper){
+  const j = S.judgments[paper.pmid] || {};
+  const box = $('#aibox');
+  box.classList.remove('hidden');
+  box.innerHTML = '<div class="bt">AI 盲判（只读标题与摘要）</div>'
+    + `<div class="ln">创新性 ${j.novelty||'-'} · 重要性 ${j.importance||'-'} · 证据强度 ${j.evidence||'-'} → 预测 <b>${j.tier||'-'} 档</b></div>`
+    + `<div class="ln" style="color:#4b5563">${j.basis||''}</div>`;
+}
+function renderAIError(paper, e){
+  const box = $('#aibox');
+  box.classList.remove('hidden');
+  box.innerHTML = '<div class="bt">AI 盲判</div><div class="ln" style="color:#a11b1b">' + (e.message || e) + '</div>';
+}
+
+function axisVerdict(yours, ai){
+  if(!yours) return ['未填',''];
+  if(yours > ai) return ['判高','hi'];
+  if(yours < ai) return ['判低','lo'];
+  return ['接近','eq'];
+}
+
+function coachPrompt(rec, it){
+  const knobs = `用户三轴：创新性${rec.novelty||'未填'}、重要性${rec.importance||'未填'}、证据强度${rec.evidence||'未填'}`
+  return `标题：${it.title}
+摘要：${it.abstract}
+实际期刊：${it.journal_name}（${it.tier}档）
+用户预测档位：${rec.pred_tier}档（实际${it.tier}档，偏差${rec.delta>0?'低估':rec.delta<0?'高估':'命中'}${Math.abs(rec.delta)}档）
+${knobs}
+用户写的一句话依据：${rec.basis || '（未填写）'}
+用户写的主张句：${rec.claim_sentence || '（未填写）'}
+用户判断的主张类型：${rec.claim_type || '（未填写）'}
+AI 的盲判：创新性${(S.judgments[it.pmid]||{}).novelty||'-'}、重要性${(S.judgments[it.pmid]||{}).importance||'-'}、证据强度${(S.judgments[it.pmid]||{}).evidence||'-'}、预测${(S.judgments[it.pmid]||{}).tier||'-'}档`;
+}
+
+async function loadCoach(rec, it){
+  const k = rec.batch + '/' + rec.id;
+  if(S.coach[k]) return S.coach[k];
+  const out = await chatJSON(COACH_SYS, coachPrompt(rec, it));
+  const f = {
+    headline: s(out.headline, 200), why_tier: s(out.why_tier, 800),
+    axes: Array.isArray(out.axes) ? out.axes.slice(0,3).map(a => ({
+      axis: s(a.axis, 20), yours: a.yours == null ? null : clamp(a.yours,1,5,null),
+      ai: clamp(a.ai,1,5,3), verdict: s(a.verdict,10), comment: s(a.comment, 400)
+    })) : [],
+    basis_review: s(out.basis_review, 600), claim_review: s(out.claim_review, 600),
+    rule: s(out.rule, 60)
+  };
+  S.coach[k] = f; persist();
+  return f;
+}
+
+function coachHTML(f){
+  let h = '<div class="bt">评价与建议</div>';
+  if(f.headline) h += `<div class="ln"><b>${f.headline}</b></div>`;
+  if(f.why_tier) h += `<div class="ln">${f.why_tier}</div>`;
+  (f.axes || []).forEach(a => {
+    const cls = a.verdict === '判高' ? 'hi' : a.verdict === '判低' ? 'lo' : a.verdict === '接近' ? 'eq' : '';
+    h += `<div class="axisline"><span>${a.axis}</span><span class="badge ${cls}">${a.verdict||''}</span>`
+      + `<span class="m" style="font-size:12px;color:#6b7785">你 ${a.yours == null ? '未填' : a.yours} / AI ${a.ai}</span></div>`
+      + `<div style="font-size:13px;color:#4b5563;margin-bottom:6px">${a.comment||''}</div>`;
+  });
+  if(f.claim_review) h += `<div class="ln" style="margin-top:8px"><b>你的主张句与类型：</b>${f.claim_review}</div>`;
+  if(f.basis_review) h += `<div class="ln"><b>你的依据：</b>${f.basis_review}</div>`;
+  if(f.rule) h += `<div class="ln" style="margin-top:8px;color:#1f4e79">规则：${f.rule}</div>`;
+  return h;
+}
+function renderCoach(rec){
+  const k = rec.batch + '/' + rec.id;
+  const f = S.coach[k]; if(!f) return;
+  const box = $('#coachbox');
+  box.classList.remove('hidden');
+  box.innerHTML = coachHTML(f);
+}
+function renderCoachError(rec, e){
+  const box = $('#coachbox');
+  box.classList.remove('hidden');
+  box.innerHTML = '<div class="bt">评价与建议</div><div class="ln" style="color:#a11b1b">' + (e.message||e) + '</div>';
+}
+
+/* ========== 历史 ========== */
+function renderHistory(){
+  const A = S.answers.slice().reverse();
+  const n = A.length;
+  const exact = A.filter(a => a.delta === 0).length;
+  const within = A.filter(a => Math.abs(a.delta) <= 1).length;
+  $('#hsum').innerHTML = n
+    ? `共 <b>${n}</b> 篇 · 完全命中 <b>${exact}</b>（${Math.round(exact/n*100)}%） · ±1档 <b>${within}</b>（${Math.round(within/n*100)}%）`
+    : '还没有作答记录。';
+
+  const list = $('#hlist'); list.innerHTML = '';
+  A.forEach(a => {
+    const row = document.createElement('div');
+    row.className = 'hrow';
+    const col = a.delta === 0 ? '#1a7f4b' : a.delta > 0 ? '#2f6fa8' : '#b45309';
+    row.innerHTML = `<span class="m">${a.date} · ${a.batch}/${a.id}</span>`
+      + `<span style="flex:1"></span>`
+      + `<span>判${a.pred_tier} / 实${a.actual_tier}</span>`
+      + `<span style="color:${col};font-weight:600">${a.delta === 0 ? '命中' : a.delta > 0 ? '低估' : '高估'}</span>`;
+    const det = document.createElement('div');
+    det.className = 'hdetail hidden';
+    det.innerHTML = histDetail(a);
+    row.onclick = () => det.classList.toggle('hidden');
+    list.appendChild(row); list.appendChild(det);
+    det.querySelector('.cbtn') && (det.querySelector('.cbtn').onclick = async ev => {
+      ev.stopPropagation();
+      const btn = ev.target; btn.disabled = true; btn.textContent = '生成中…';
+      const it = {title: a.title, abstract: a.abstract, pmid: a.pmid, journal_name: a.journal};
+      await loadAI(it).catch(()=>{});
+      await loadCoach(a, it).catch(()=>{});
+      det.innerHTML = histDetail(a);
+      det.querySelector('.cbtn') && (det.querySelector('.cbtn').onclick = null);
+    });
+  });
+}
+
+function histDetail(a){
+  let h = `<div class="dmeta">${a.journal} · ${a.actual_tier}档 · ${a.ring}</div>`;
+  h += `<div><b>${escapeHTML(a.title||'')}</b></div>`;
+  h += `<div style="font-size:13px;color:#6b7785;margin:6px 0">你的三轴：创新性${a.novelty||'-'} · 重要性${a.importance||'-'} · 证据强度${a.evidence||'-'}</div>`;
+  if(a.basis) h += `<div style="font-size:13px;margin:4px 0"><b>依据：</b>${escapeHTML(a.basis)}</div>`;
+  if(a.claim_sentence || a.claim_type){
+    h += `<div class="dclaim"><b>${a.claim_type ? '〔'+a.claim_type+'〕' : ''}</b> ${escapeHTML(a.claim_sentence||'')}</div>`;
+  }
+  if(a.abstract) h += `<div style="font-size:13px;line-height:1.65;color:#3b4550;margin:8px 0">${escapeHTML(a.abstract)}</div>`;
+  const j = a.pmid && S.judgments[a.pmid];
+  h += '<div class="box">' + (j
+    ? `<div class="bt">AI 盲判</div><div class="ln">创新性 ${j.novelty} · 重要性 ${j.importance} · 证据强度 ${j.evidence} → ${j.tier}档</div><div class="ln" style="color:#4b5563">${escapeHTML(j.basis||'')}</div>`
+    : `<div class="bt">AI 盲判</div><div class="ln" style="color:#6b7785">未生成</div>`) + '</div>';
+  const f = S.coach[a.batch + '/' + a.id];
+  h += '<div class="box">' + (f ? coachHTML(f)
+    : `<div class="bt">评价与建议</div><div class="ln" style="color:#6b7785">未生成</div><button class="cbtn small ghost" style="margin-top:6px">生成</button>`) + '</div>';
+  return h;
+}
+function escapeHTML(x){ return String(x||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* ========== 分析 ========== */
+function renderStats(){
+  const A = S.answers;
+  if(!A.length){ $('#anpanel').innerHTML = '<div style="color:#6b7785">还没有数据。</div>'; return; }
+  const m = [[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]];
+  A.forEach(a => { m[a.pred_tier-1][a.actual_tier-1]++; });
+  const pairs = {};
+  A.forEach(a => { if(a.delta) { const k = a.pred_tier+'→'+a.actual_tier; pairs[k]=(pairs[k]||0)+1; } });
+  const top = Object.entries(pairs).sort((x,y)=>y[1]-x[1])[0];
+
+  let h = '';
+  h += `<div style="font-size:14px;margin-bottom:6px">共 ${A.length} 篇：完全命中 ${A.filter(a=>a.delta===0).length}，±1档 ${A.filter(a=>Math.abs(a.delta)<=1).length}</div>`;
+  if(top) h += `<div style="font-size:13px;color:#4b5563;margin-bottom:10px">最常见误判：${top[0]}（${top[1]}次）</div>`;
+
+  h += '<table class="mtx"><tr><th>预测＼实际</th><th>1档</th><th>2档</th><th>3档</th><th>4档</th></tr>';
+  for(let p = 0; p < 4; p++){
+    h += `<tr><th>${p+1}档</th>`;
+    for(let a2 = 0; a2 < 4; a2++){
+      const v = m[p][a2];
+      const bg = v ? `rgba(31,78,121,${Math.min(0.12 + v/Math.max(1,A.length)*0.9, .85)})` : '#fff';
+      const col = v && v/Math.max(1,A.length) > .25 ? '#fff' : '#1c2128';
+      h += `<td class="${p===a2?'diag':''}" style="background:${bg};color:${col}">${v||''}</td>`;
+    }
+    h += '</tr>';
+  }
+  h += '</table>';
+
+  // 三轴
+  const axes = [['novelty','创新性'],['importance','重要性'],['evidence','证据强度']];
+  h += '<div style="margin-top:16px;font-size:14px"><b>三轴偏移</b>（你 − AI）</div>';
+  axes.forEach(([k, name]) => {
+    const rows = A.filter(a => a[k] && a.pmid && S.judgments[a.pmid]);
+    if(!rows.length){ h += `<div style="font-size:13px;color:#6b7785;margin-top:6px">${name}：无AI评分可对比</div>`; return; }
+    const diffs = rows.map(a => a[k] - S.judgments[a.pmid][{novelty:'novelty',importance:'importance',evidence:'evidence'}[k]]);
+    const mean = diffs.reduce((x,y)=>x+y,0)/diffs.length;
+    const hi = diffs.filter(d=>d>0).length, lo = diffs.filter(d=>d<0).length;
+    h += `<div style="font-size:13px;margin-top:6px">${name}：平均 ${mean>0?'+':''}${mean.toFixed(2)} · 判高 ${hi} · 判低 ${lo} · 一致 ${rows.length-hi-lo}（n=${rows.length}）</div>`;
+  });
+
+  // 趋势
+  if(A.length >= 10){
+    h += '<div style="margin-top:16px;font-size:14px"><b>每10篇完全命中率</b></div><div class="trend">';
+    for(let i = 0; i < A.length; i += 10){
+      const chunk = A.slice(i, i+10);
+      const rate = chunk.filter(a=>a.delta===0).length / chunk.length;
+      h += `<div style="height:${Math.round(rate*70)+4}px"><span>${Math.round(rate*100)}%</span></div>`;
+    }
+    h += '</div>';
+  } else {
+    h += `<div style="margin-top:14px;font-size:13px;color:#6b7785">满10篇后显示趋势。</div>`;
+  }
+  h += `<div style="margin-top:14px;font-size:12px;color:#6b7785">参考基线：4档随机猜完全命中25%、±1档62.5%。</div>`;
+  $('#anpanel').innerHTML = h;
+}
+$('#anbtn').onclick = renderStats;
+
+/* ========== 设置 ========== */
+function renderSettings(){
+  $('#apikey').value = S.settings.key || '';
+  $('#aibase').value = S.settings.base || 'https://api.deepseek.com/v1';
+  $('#aimodel').value = S.settings.model || 'deepseek-chat';
+}
+$('#savecfg').onclick = () => {
+  S.settings.key = $('#apikey').value.trim();
+  S.settings.base = $('#aibase').value.trim() || 'https://api.deepseek.com/v1';
+  S.settings.model = $('#aimodel').value.trim() || 'deepseek-chat';
+  persist();
+  $('#cfglog').textContent = '已保存。';
+};
+
+$('#exportbtn').onclick = () => {
+  const blob = new Blob([JSON.stringify(S, null, 1)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'tier-practice-' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  $('#datalog').textContent = '已导出。';
+};
+$('#importbtn').onclick = () => $('#importfile').click();
+$('#importfile').onchange = async e => {
+  const f = e.target.files[0]; if(!f) return;
+  try{
+    const d = JSON.parse(await f.text());
+    let added = 0;
+    (d.batches || []).forEach(b => {
+      if(!S.batches.some(x => x.id === b.id)){ S.batches.push(b); added++; }
+    });
+    (d.answers || []).forEach(a => {
+      if(!S.answers.some(x => x.batch === a.batch && x.id === a.id)){ S.answers.push(a); added++; }
+    });
+    Object.assign(S.judgments, d.judgments || {});
+    Object.assign(S.coach, d.coach || {});
+    S.batches.sort((x,y) => (y.id > x.id ? 1 : -1));
+    if(!S.last && S.batches[0]) S.last = S.batches[0].id;
+    persist();
+    $('#datalog').textContent = `导入完成，新增 ${added} 条记录。`;
+    renderPractice();
+  }catch(err){ $('#datalog').textContent = '导入失败：' + err.message; }
+};
+
+/* ========== 启动 ========== */
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+renderPractice();
+if(location.hash){
+  const t = location.hash.slice(1);
+  if(['practice','history','stats','settings'].includes(t)) showTab(t);
+}
+</script>
+</body>
+</html>

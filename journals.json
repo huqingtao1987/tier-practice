@@ -1,0 +1,166 @@
+{
+  "journals": [
+    {
+      "name": "Nature",
+      "ta": "Nature",
+      "tier": 1,
+      "ring": "far"
+    },
+    {
+      "name": "Science",
+      "ta": "Science",
+      "tier": 1,
+      "ring": "far"
+    },
+    {
+      "name": "Cell",
+      "ta": "Cell",
+      "tier": 1,
+      "ring": "far"
+    },
+    {
+      "name": "Nature Immunology",
+      "ta": "Nat Immunol",
+      "tier": 2,
+      "ring": "core"
+    },
+    {
+      "name": "Immunity",
+      "ta": "Immunity",
+      "tier": 2,
+      "ring": "core"
+    },
+    {
+      "name": "Science Immunology",
+      "ta": "Sci Immunol",
+      "tier": 2,
+      "ring": "core"
+    },
+    {
+      "name": "Cell Host & Microbe",
+      "ta": "Cell Host Microbe",
+      "tier": 2,
+      "ring": "core"
+    },
+    {
+      "name": "Nature Microbiology",
+      "ta": "Nat Microbiol",
+      "tier": 2,
+      "ring": "core"
+    },
+    {
+      "name": "Nature Medicine",
+      "ta": "Nat Med",
+      "tier": 2,
+      "ring": "core"
+    },
+    {
+      "name": "Lancet Infectious Diseases",
+      "ta": "Lancet Infect Dis",
+      "tier": 2,
+      "ring": "near"
+    },
+    {
+      "name": "Journal of Experimental Medicine",
+      "ta": "J Exp Med",
+      "tier": 3,
+      "ring": "core"
+    },
+    {
+      "name": "PNAS",
+      "ta": "Proc Natl Acad Sci U S A",
+      "tier": 3,
+      "ring": "core"
+    },
+    {
+      "name": "Nature Communications",
+      "ta": "Nat Commun",
+      "tier": 3,
+      "ring": "core"
+    },
+    {
+      "name": "PLOS Pathogens",
+      "ta": "PLoS Pathog",
+      "tier": 3,
+      "ring": "core"
+    },
+    {
+      "name": "eLife",
+      "ta": "Elife",
+      "tier": 3,
+      "ring": "core"
+    },
+    {
+      "name": "Cell Reports",
+      "ta": "Cell Rep",
+      "tier": 3,
+      "ring": "core"
+    },
+    {
+      "name": "mBio",
+      "ta": "mBio",
+      "tier": 3,
+      "ring": "core"
+    },
+    {
+      "name": "Journal of Clinical Investigation",
+      "ta": "J Clin Invest",
+      "tier": 3,
+      "ring": "core"
+    },
+    {
+      "name": "Clinical Infectious Diseases",
+      "ta": "Clin Infect Dis",
+      "tier": 3,
+      "ring": "near"
+    },
+    {
+      "name": "Journal of Infection",
+      "ta": "J Infect",
+      "tier": 3,
+      "ring": "near"
+    },
+    {
+      "name": "Emerging Microbes & Infections",
+      "ta": "Emerg Microbes Infect",
+      "tier": 3,
+      "ring": "near"
+    },
+    {
+      "name": "eBioMedicine",
+      "ta": "EBioMedicine",
+      "tier": 3,
+      "ring": "near"
+    },
+    {
+      "name": "Journal of Infectious Diseases",
+      "ta": "J Infect Dis",
+      "tier": 3,
+      "ring": "near"
+    },
+    {
+      "name": "Journal of Virology",
+      "ta": "J Virol",
+      "tier": 4,
+      "ring": "core"
+    },
+    {
+      "name": "Frontiers in Immunology",
+      "ta": "Front Immunol",
+      "tier": 4,
+      "ring": "core"
+    },
+    {
+      "name": "Journal of Immunology",
+      "ta": "J Immunol",
+      "tier": 4,
+      "ring": "core"
+    },
+    {
+      "name": "European Journal of Immunology",
+      "ta": "Eur J Immunol",
+      "tier": 4,
+      "ring": "core"
+    }
+  ]
+}
