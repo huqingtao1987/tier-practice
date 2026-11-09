@@ -120,19 +120,17 @@ footer{text-align:center;font-size:12px;color:var(--mute);padding:18px 12px}
     <h2 id="qtitle"></h2>
     <div class="abs" id="qabs"></div>
 
-    <label class="lab">主张句（可选）——写成一句可被反对的话</label>
-    <textarea id="claim" rows="2" placeholder="例：X通过Z使Y发生变化"></textarea>
-    <div class="lab">主张类型（可选）</div>
-    <div id="typesel" class="chips"></div>
-
     <div class="lab">你判断的档位（必填）</div>
     <div id="tiers" class="chips"></div>
 
     <div class="lab">三轴（可选）</div>
     <div id="knobs"></div>
 
-    <label class="lab">一句话依据（可选）</label>
-    <textarea id="basis" rows="2"></textarea>
+    <div class="lab">主张类型（可选）</div>
+    <div id="typesel" class="chips"></div>
+
+    <label class="lab">一句话：主张 + 依据（可选）</label>
+    <textarea id="basis" rows="3" placeholder="例：X通过Z使Y发生变化；依据是……"></textarea>
 
     <div class="btns"><button id="submit" disabled>提交并查看答案</button><button id="skip" class="ghost">跳过</button></div>
   </div>
@@ -184,7 +182,7 @@ footer{text-align:center;font-size:12px;color:var(--mute);padding:18px 12px}
   </div>
 
   <div class="card" style="font-size:13px;color:var(--mute)">
-    档位口径：1=CNS；2=IF&gt;20；3=IF10–20；4=IF5–10。数字越小刊越好。<br>
+    档位口径（按钮从左到右）：1-5分 · 5-10分 · 10分 · 大子刊 · CNS。内部1最好、5最差。<br>
     三轴：创新性＝与领域默认答案的距离；重要性＝受众面；证据强度＝因果链闭合度。按最弱项定档。
   </div>
 </section>
@@ -198,6 +196,10 @@ const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const KEY = 'tp.v1';
 const TYPES = ['描述','关联','因果','机制','规则·原则','资源·方法'];
+// 内部编号 1 最好、5 最差；显示顺序按用户要求从左到右 = 由低到高
+const TNAME = {1:'CNS', 2:'大子刊', 3:'10分', 4:'5-10分', 5:'1-5分'};
+const TORDER = [5,4,3,2,1];
+const dl = a => Number(a.pred_tier) - Number(a.actual_tier);
 const BAD_TYPES = new Set(['Review','Comment','Editorial','News','Letter','Case Reports',
   'Published Erratum','Preprint','Retraction of Publication','Retracted Publication']);
 const MIN_ABSTRACT = 600;
@@ -406,15 +408,15 @@ function renderPractice(){
   $('#qidx').textContent = `第 ${idx + 1} / ${b.items.length} 篇`;
   $('#qtitle').textContent = it.title;
   $('#qabs').textContent = it.abstract;
-  $('#claim').value = ''; $('#basis').value = '';
+  $('#basis').value = '';
   renderTiers(); renderTypes(); renderKnobs(); refreshSubmit();
 }
 
 function renderTiers(){
   const box = $('#tiers'); box.innerHTML = '';
-  [1,2,3,4].forEach(t => {
+  TORDER.forEach(t => {
     const btn = document.createElement('button');
-    btn.textContent = t + '档';
+    btn.textContent = TNAME[t];
     if(Q.tier === t) btn.classList.add('on');
     btn.onclick = () => { Q.tier = (Q.tier === t ? null : t); renderTiers(); refreshSubmit(); };
     box.appendChild(btn);
@@ -459,7 +461,7 @@ function submitAnswer(){
     pred_tier: Q.tier, delta: Q.tier - it.tier,
     novelty: Q.knobs.n, importance: Q.knobs.i, evidence: Q.knobs.e,
     basis: $('#basis').value.trim(),
-    claim_type: Q.type, claim_sentence: $('#claim').value.trim()
+    claim_type: Q.type, claim_sentence: ''
   };
   if(answered(b, it)) return;
   S.answers.push(rec); persist();
@@ -477,8 +479,8 @@ function showReveal(rec, it){
   if(d > 0){ cls = 'under'; txt = `低估 ${d} 档`; }
   if(d < 0){ cls = 'over'; txt = `高估 ${-d} 档`; }
   $('#verdict').className = 'verdict ' + cls;
-  $('#verdict').textContent = `${txt}（你判 ${rec.pred_tier} 档）`;
-  $('#revj').textContent = `实际：${it.journal_name}（${it.tier} 档 · ${it.ring}）`;
+  $('#verdict').textContent = `${txt}（你判 ${TNAME[rec.pred_tier]||rec.pred_tier}）`;
+  $('#revj').textContent = `实际：${it.journal_name}（${TNAME[it.tier]||it.tier} · ${it.ring}）`;
   ['#aibox','#coachbox'].forEach(s => { $(s).classList.add('hidden'); $(s).innerHTML = ''; });
 }
 
@@ -504,14 +506,14 @@ const AI_SYS = '你是生命科学期刊的资深编辑。只根据给出的标�
  + '创新性 novelty：结论与该领域默认答案的距离。1=基本重复已知；3=已知框架下的新证据；5=改写领域默认答案。\n'
  + '重要性 importance：受众面。1=小众技术细节；3=本领域同行关注；5=跨领域广泛关注。\n'
  + '证据强度 evidence：因果链闭合度。1=相关性或单一模型；3=多层面互证但缺体内因果；5=判决性证据齐备。\n'
- + 'tier：按三项中最弱的一项定档（木桶原理）。1=CNS；2=IF>20；3=IF10–20；4=IF5–10。\n'
+ + 'tier：按三项中最弱的一项定档（木桶原理）。1=CNS；2=大子刊；3=10分左右；4=5-10分；5=1-5分。\n'
  + '只输出严格JSON，不要代码块：'
  + '{"novelty":整数,"importance":整数,"evidence":整数,"tier":整数,'
  + '"basis":"一句中文，不超过60字，指出承重的是哪个维度、关键理由是什么"}';
 
 const COACH_SYS = '你是科研写作与投稿判断的教练。用户看到一篇论文的标题和摘要，先自己判断了发表档位，'
  + '现在答案已揭晓。你的任务是评价他的这次判断，帮他找到偏差原因，而不是夸他。\n'
- + '档位口径：1=CNS；2=IF>20；3=IF10–20；4=IF5–10。数字越小刊越好。\n'
+ + '档位口径：1=CNS；2=大子刊；3=10分左右；4=5-10分；5=1-5分。数字越小刊越好。\n'
  + '三个维度各1–5分：创新性=结论与该领域默认答案的距离；重要性=受众面；证据强度=因果链闭合度。\n'
  + '评价规则：\n'
  + '1. 只依据标题、摘要、用户的判断和实际档位。不要假装看过全文或图。信息不足时直接说明。\n'
@@ -564,7 +566,7 @@ async function loadAI(paper){
   const out = await chatJSON(AI_SYS, '标题：' + paper.title + '\n摘要：' + paper.abstract);
   const j = {
     novelty: clamp(out.novelty,1,5,3), importance: clamp(out.importance,1,5,3),
-    evidence: clamp(out.evidence,1,5,3), tier: clamp(out.tier,1,4,3),
+    evidence: clamp(out.evidence,1,5,3), tier: clamp(out.tier,1,5,3),
     basis: s(out.basis, 200)
   };
   S.judgments[paper.pmid] = j; persist();
@@ -576,7 +578,7 @@ function renderAI(paper){
   const box = $('#aibox');
   box.classList.remove('hidden');
   box.innerHTML = '<div class="bt">AI 盲判（只读标题与摘要）</div>'
-    + `<div class="ln">创新性 ${j.novelty||'-'} · 重要性 ${j.importance||'-'} · 证据强度 ${j.evidence||'-'} → 预测 <b>${j.tier||'-'} 档</b></div>`
+    + `<div class="ln">创新性 ${j.novelty||'-'} · 重要性 ${j.importance||'-'} · 证据强度 ${j.evidence||'-'} → 预测 <b>${TNAME[j.tier]||'-'}</b></div>`
     + `<div class="ln" style="color:#4b5563">${j.basis||''}</div>`;
 }
 function renderAIError(paper, e){
@@ -593,16 +595,17 @@ function axisVerdict(yours, ai){
 }
 
 function coachPrompt(rec, it){
-  const knobs = `用户三轴：创新性${rec.novelty||'未填'}、重要性${rec.importance||'未填'}、证据强度${rec.evidence||'未填'}`
+  const knobs = `用户三轴：创新性${rec.novelty||'未填'}、重要性${rec.importance||'未填'}、证据强度${rec.evidence||'未填'}`;
+  const d = dl(rec);
+  const aiT = (S.judgments[it.pmid]||{}).tier;
   return `标题：${it.title}
 摘要：${it.abstract}
-实际期刊：${it.journal_name}（${it.tier}档）
-用户预测档位：${rec.pred_tier}档（实际${it.tier}档，偏差${rec.delta>0?'低估':rec.delta<0?'高估':'命中'}${Math.abs(rec.delta)}档）
+实际期刊：${it.journal_name}（${TNAME[it.tier]||it.tier}）
+用户预测档位：${TNAME[rec.pred_tier]||rec.pred_tier}（实际${TNAME[it.tier]||it.tier}，偏差${d>0?'低估':d<0?'高估':'命中'}${Math.abs(d)}档）
 ${knobs}
-用户写的一句话依据：${rec.basis || '（未填写）'}
-用户写的主张句：${rec.claim_sentence || '（未填写）'}
+用户写的一句话（主张与依据）：${rec.basis || rec.claim_sentence || '（未填写）'}
 用户判断的主张类型：${rec.claim_type || '（未填写）'}
-AI 的盲判：创新性${(S.judgments[it.pmid]||{}).novelty||'-'}、重要性${(S.judgments[it.pmid]||{}).importance||'-'}、证据强度${(S.judgments[it.pmid]||{}).evidence||'-'}、预测${(S.judgments[it.pmid]||{}).tier||'-'}档`;
+AI 的盲判：创新性${(S.judgments[it.pmid]||{}).novelty||'-'}、重要性${(S.judgments[it.pmid]||{}).importance||'-'}、证据强度${(S.judgments[it.pmid]||{}).evidence||'-'}、预测${aiT?TNAME[aiT]:'-'}`;
 }
 
 async function loadCoach(rec, it){
@@ -654,21 +657,28 @@ function renderCoachError(rec, e){
 function renderHistory(){
   const A = S.answers.slice().reverse();
   const n = A.length;
-  const exact = A.filter(a => a.delta === 0).length;
-  const within = A.filter(a => Math.abs(a.delta) <= 1).length;
+  const D = a => dl(a);
+  const exact = A.filter(a => D(a) === 0).length;
+  const within = A.filter(a => Math.abs(D(a)) <= 1).length;
+  const off = A.filter(a => Math.abs(D(a)) >= 2);
   $('#hsum').innerHTML = n
-    ? `共 <b>${n}</b> 篇 · 完全命中 <b>${exact}</b>（${Math.round(exact/n*100)}%） · ±1档 <b>${within}</b>（${Math.round(within/n*100)}%）`
+    ? `共 <b>${n}</b> 篇 · 完全命中 <b>${exact}</b>（${Math.round(exact/n*100)}%） · ±1档内 <b>${within}</b>（${Math.round(within/n*100)}%）`
+      + ` · <span style="color:#a11b1b">偏差≥2档 <b>${off.length}</b></span>`
+      + (off.length ? `<div style="font-size:13px;color:#a11b1b;margin-top:6px">` +
+          off.map(a => `${a.date} ${a.batch}/${a.id} ${TNAME[a.pred_tier]||a.pred_tier}→${TNAME[a.actual_tier]||a.actual_tier}（${a.journal}）`).join('；') +
+          '</div>' : '')
     : '还没有作答记录。';
 
   const list = $('#hlist'); list.innerHTML = '';
   A.forEach(a => {
     const row = document.createElement('div');
     row.className = 'hrow';
-    const col = a.delta === 0 ? '#1a7f4b' : a.delta > 0 ? '#2f6fa8' : '#b45309';
+    const d = D(a);
+    const col = d === 0 ? '#1a7f4b' : d > 0 ? '#2f6fa8' : '#b45309';
     row.innerHTML = `<span class="m">${a.date} · ${a.batch}/${a.id}</span>`
       + `<span style="flex:1"></span>`
-      + `<span>判${a.pred_tier} / 实${a.actual_tier}</span>`
-      + `<span style="color:${col};font-weight:600">${a.delta === 0 ? '命中' : a.delta > 0 ? '低估' : '高估'}</span>`;
+      + `<span>判${TNAME[a.pred_tier]||a.pred_tier} / 实${TNAME[a.actual_tier]||a.actual_tier}</span>`
+      + `<span style="color:${col};font-weight:600">${d === 0 ? '命中' : d > 0 ? '低估' : '高估'}</span>`;
     const det = document.createElement('div');
     det.className = 'hdetail hidden';
     det.innerHTML = histDetail(a);
@@ -687,7 +697,7 @@ function renderHistory(){
 }
 
 function histDetail(a){
-  let h = `<div class="dmeta">${a.journal} · ${a.actual_tier}档 · ${a.ring}</div>`;
+  let h = `<div class="dmeta">${a.journal} · ${TNAME[a.actual_tier]||a.actual_tier} · ${a.ring}</div>`;
   h += `<div><b>${escapeHTML(a.title||'')}</b></div>`;
   h += `<div style="font-size:13px;color:#6b7785;margin:6px 0">你的三轴：创新性${a.novelty||'-'} · 重要性${a.importance||'-'} · 证据强度${a.evidence||'-'}</div>`;
   if(a.basis) h += `<div style="font-size:13px;margin:4px 0"><b>依据：</b>${escapeHTML(a.basis)}</div>`;
@@ -697,7 +707,7 @@ function histDetail(a){
   if(a.abstract) h += `<div style="font-size:13px;line-height:1.65;color:#3b4550;margin:8px 0">${escapeHTML(a.abstract)}</div>`;
   const j = a.pmid && S.judgments[a.pmid];
   h += '<div class="box">' + (j
-    ? `<div class="bt">AI 盲判</div><div class="ln">创新性 ${j.novelty} · 重要性 ${j.importance} · 证据强度 ${j.evidence} → ${j.tier}档</div><div class="ln" style="color:#4b5563">${escapeHTML(j.basis||'')}</div>`
+    ? `<div class="bt">AI 盲判</div><div class="ln">创新性 ${j.novelty} · 重要性 ${j.importance} · 证据强度 ${j.evidence} → ${TNAME[j.tier]||j.tier}</div><div class="ln" style="color:#4b5563">${escapeHTML(j.basis||'')}</div>`
     : `<div class="bt">AI 盲判</div><div class="ln" style="color:#6b7785">未生成</div>`) + '</div>';
   const f = S.coach[a.batch + '/' + a.id];
   h += '<div class="box">' + (f ? coachHTML(f)
@@ -710,20 +720,21 @@ function escapeHTML(x){ return String(x||'').replace(/[&<>"]/g, c => ({'&':'&amp
 function renderStats(){
   const A = S.answers;
   if(!A.length){ $('#anpanel').innerHTML = '<div style="color:#6b7785">还没有数据。</div>'; return; }
-  const m = [[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]];
-  A.forEach(a => { m[a.pred_tier-1][a.actual_tier-1]++; });
+  const m = {};
+  TORDER.forEach(p => { m[p] = {}; TORDER.forEach(a2 => m[p][a2] = 0); });
+  A.forEach(a => { if(m[a.pred_tier] && m[a.pred_tier][a.actual_tier] !== undefined) m[a.pred_tier][a.actual_tier]++; });
   const pairs = {};
-  A.forEach(a => { if(a.delta) { const k = a.pred_tier+'→'+a.actual_tier; pairs[k]=(pairs[k]||0)+1; } });
+  A.forEach(a => { const d = dl(a); if(d) { const k = (TNAME[a.pred_tier]||a.pred_tier)+'→'+(TNAME[a.actual_tier]||a.actual_tier); pairs[k]=(pairs[k]||0)+1; } });
   const top = Object.entries(pairs).sort((x,y)=>y[1]-x[1])[0];
 
   let h = '';
-  h += `<div style="font-size:14px;margin-bottom:6px">共 ${A.length} 篇：完全命中 ${A.filter(a=>a.delta===0).length}，±1档 ${A.filter(a=>Math.abs(a.delta)<=1).length}</div>`;
+  h += `<div style="font-size:14px;margin-bottom:6px">共 ${A.length} 篇：完全命中 ${A.filter(a=>dl(a)===0).length}，±1档内 ${A.filter(a=>Math.abs(dl(a))<=1).length}</div>`;
   if(top) h += `<div style="font-size:13px;color:#4b5563;margin-bottom:10px">最常见误判：${top[0]}（${top[1]}次）</div>`;
 
-  h += '<table class="mtx"><tr><th>预测＼实际</th><th>1档</th><th>2档</th><th>3档</th><th>4档</th></tr>';
-  for(let p = 0; p < 4; p++){
-    h += `<tr><th>${p+1}档</th>`;
-    for(let a2 = 0; a2 < 4; a2++){
+  h += '<table class="mtx"><tr><th>预测＼实际</th>' + TORDER.map(t=>`<th>${TNAME[t]}</th>`).join('') + '</tr>';
+  for(const p of TORDER){
+    h += `<tr><th>${TNAME[p]}</th>`;
+    for(const a2 of TORDER){
       const v = m[p][a2];
       const bg = v ? `rgba(31,78,121,${Math.min(0.12 + v/Math.max(1,A.length)*0.9, .85)})` : '#fff';
       const col = v && v/Math.max(1,A.length) > .25 ? '#fff' : '#1c2128';
@@ -750,14 +761,14 @@ function renderStats(){
     h += '<div style="margin-top:16px;font-size:14px"><b>每10篇完全命中率</b></div><div class="trend">';
     for(let i = 0; i < A.length; i += 10){
       const chunk = A.slice(i, i+10);
-      const rate = chunk.filter(a=>a.delta===0).length / chunk.length;
+      const rate = chunk.filter(a=>dl(a)===0).length / chunk.length;
       h += `<div style="height:${Math.round(rate*70)+4}px"><span>${Math.round(rate*100)}%</span></div>`;
     }
     h += '</div>';
   } else {
     h += `<div style="margin-top:14px;font-size:13px;color:#6b7785">满10篇后显示趋势。</div>`;
   }
-  h += `<div style="margin-top:14px;font-size:12px;color:#6b7785">参考基线：4档随机猜完全命中25%、±1档62.5%。</div>`;
+  h += `<div style="margin-top:14px;font-size:12px;color:#6b7785">参考基线：5档随机猜完全命中20%、±1档内52%（共${A.length}篇）。</div>`;
   $('#anpanel').innerHTML = h;
 }
 $('#anbtn').onclick = renderStats;

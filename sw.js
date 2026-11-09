@@ -1,4 +1,4 @@
-const CACHE = 'tp-v2';
+const CACHE = 'tp-v3';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'journals.json', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {

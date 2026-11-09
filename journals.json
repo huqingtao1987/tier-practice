@@ -161,6 +161,30 @@
       "ta": "Eur J Immunol",
       "tier": 4,
       "ring": "core"
+    },
+    {
+      "name": "Journal of Medical Virology",
+      "ta": "J Med Virol",
+      "tier": 5,
+      "ring": "core"
+    },
+    {
+      "name": "Virology",
+      "ta": "Virology",
+      "tier": 5,
+      "ring": "core"
+    },
+    {
+      "name": "Virus Research",
+      "ta": "Virus Res",
+      "tier": 5,
+      "ring": "far"
+    },
+    {
+      "name": "BMC Infectious Diseases",
+      "ta": "BMC Infect Dis",
+      "tier": 5,
+      "ring": "near"
     }
   ]
 }
