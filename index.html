@@ -672,9 +672,9 @@ function renderHistory(){
 
   const list = $('#hlist'); list.innerHTML = '';
   A.forEach(a => {
+    const d = dl(a);
     const row = document.createElement('div');
     row.className = 'hrow';
-    const d = D(a);
     const col = d === 0 ? '#1a7f4b' : d > 0 ? '#2f6fa8' : '#b45309';
     row.innerHTML = `<span class="m">${a.date} · ${a.batch}/${a.id}</span>`
       + `<span style="flex:1"></span>`
@@ -682,7 +682,8 @@ function renderHistory(){
       + `<span style="color:${col};font-weight:600">${d === 0 ? '命中' : d > 0 ? '低估' : '高估'}</span>`;
     const det = document.createElement('div');
     det.className = 'hdetail hidden';
-    det.innerHTML = histDetail(a);
+    try{ det.innerHTML = histDetail(a); }
+    catch(e){ det.innerHTML = `<div class="dmeta" style="color:#a11b1b">该条记录渲染失败：${e.message||e}</div>`; }
     row.onclick = () => det.classList.toggle('hidden');
     list.appendChild(row); list.appendChild(det);
     det.querySelector('.cbtn') && (det.querySelector('.cbtn').onclick = async ev => {
@@ -695,6 +696,13 @@ function renderHistory(){
       det.querySelector('.cbtn') && (det.querySelector('.cbtn').onclick = null);
     });
   });
+  if(n){
+    const foot = document.createElement('div');
+    foot.className = 'note';
+    foot.style.padding = '10px 4px';
+    foot.textContent = `以上共 ${n} 条记录`;
+    list.appendChild(foot);
+  }
 }
 
 function histDetail(a){
