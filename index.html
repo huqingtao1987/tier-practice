@@ -200,6 +200,8 @@ const TYPES = ['描述','关联','因果','机制','规则·原则','资源·方
 const TNAME = {1:'CNS', 2:'大子刊', 3:'10分', 4:'5-10分', 5:'1-5分'};
 const TORDER = [5,4,3,2,1];
 const dl = a => Number(a.pred_tier) - Number(a.actual_tier);
+const okRec = a => { const p = Number(a.pred_tier), c = Number(a.actual_tier);
+  return Number.isFinite(p) && Number.isFinite(c) && p >= 1 && p <= 5 && c >= 1 && c <= 5; };
 const BAD_TYPES = new Set(['Review','Comment','Editorial','News','Letter','Case Reports',
   'Published Erratum','Preprint','Retraction of Publication','Retracted Publication']);
 const MIN_ABSTRACT = 600;
@@ -657,16 +659,15 @@ function renderCoachError(rec, e){
 function renderHistory(){
   const A = S.answers.slice().reverse();
   const n = A.length;
-  const D = a => dl(a);
-  const exact = A.filter(a => D(a) === 0).length;
-  const within = A.filter(a => Math.abs(D(a)) <= 1).length;
-  const off = A.filter(a => Math.abs(D(a)) >= 2);
+  const V = A.filter(okRec), m = V.length;
+  const exact = V.filter(a => dl(a) === 0).length;
+  const one = V.filter(a => Math.abs(dl(a)) === 1).length;
+  const off = m - exact - one;
+  const pc = x => m ? Math.round(x/m*100) + '%' : '—';
   $('#hsum').innerHTML = n
-    ? `共 <b>${n}</b> 篇 · 完全命中 <b>${exact}</b>（${Math.round(exact/n*100)}%） · ±1档内 <b>${within}</b>（${Math.round(within/n*100)}%）`
-      + ` · <span style="color:#a11b1b">偏差≥2档 <b>${off.length}</b></span>`
-      + (off.length ? `<div style="font-size:13px;color:#a11b1b;margin-top:6px">` +
-          off.map(a => `${a.date} ${a.batch}/${a.id} ${TNAME[a.pred_tier]||a.pred_tier}→${TNAME[a.actual_tier]||a.actual_tier}（${a.journal}）`).join('；') +
-          '</div>' : '')
+    ? `共 <b>${n}</b> 篇 · 完全命中 <b>${exact}</b>（${pc(exact)}） · 偏差1档 <b>${one}</b>（${pc(one)}）`
+      + ` · <span style="color:#a11b1b">偏差≥2档 <b>${off}</b>（${pc(off)}）</span>`
+      + (m < n ? `<div style="font-size:12px;color:#6b7785;margin-top:6px">另有 ${n - m} 篇档位数据缺失，未计入统计。</div>` : '')
     : '还没有作答记录。';
 
   const list = $('#hlist'); list.innerHTML = '';
@@ -728,7 +729,9 @@ function renderStats(){
   const top = Object.entries(pairs).sort((x,y)=>y[1]-x[1])[0];
 
   let h = '';
-  h += `<div style="font-size:14px;margin-bottom:6px">共 ${A.length} 篇：完全命中 ${A.filter(a=>dl(a)===0).length}，±1档内 ${A.filter(a=>Math.abs(dl(a))<=1).length}</div>`;
+  const V = A.filter(okRec), nv = V.length;
+  const ex = V.filter(a=>dl(a)===0).length, on = V.filter(a=>Math.abs(dl(a))===1).length;
+  h += `<div style="font-size:14px;margin-bottom:6px">共 ${A.length} 篇：完全命中 ${ex} · 偏差1档 ${on} · 偏差≥2档 ${nv-ex-on}${nv<A.length?`（${A.length-nv}篇数据缺失未计）`:''}</div>`;
   if(top) h += `<div style="font-size:13px;color:#4b5563;margin-bottom:10px">最常见误判：${top[0]}（${top[1]}次）</div>`;
 
   h += '<table class="mtx"><tr><th>预测＼实际</th>' + TORDER.map(t=>`<th>${TNAME[t]}</th>`).join('') + '</tr>';
@@ -768,7 +771,7 @@ function renderStats(){
   } else {
     h += `<div style="margin-top:14px;font-size:13px;color:#6b7785">满10篇后显示趋势。</div>`;
   }
-  h += `<div style="margin-top:14px;font-size:12px;color:#6b7785">参考基线：5档随机猜完全命中20%、±1档内52%（共${A.length}篇）。</div>`;
+  h += `<div style="margin-top:14px;font-size:12px;color:#6b7785">参考基线：5档随机猜完全命中20%、±1档内52%。</div>`;
   $('#anpanel').innerHTML = h;
 }
 $('#anbtn').onclick = renderStats;
