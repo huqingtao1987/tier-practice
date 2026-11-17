@@ -98,8 +98,14 @@ footer{text-align:center;font-size:12px;color:var(--mute);padding:18px 12px}
     <details id="genpanel">
       <summary style="cursor:pointer;font-size:14px;color:var(--blue)">生成新一批</summary>
       <div class="row" style="margin-top:10px">
+        <label>来源
+          <select id="source">
+            <option value="pubmed">PubMed · 练档位</option>
+            <option value="zotero">Zotero库 · 练主张</option>
+          </select>
+        </label>
         <label>篇数<input id="n" type="number" inputmode="numeric" value="10" min="1" max="30"></label>
-        <label>回溯天数<input id="days" type="number" inputmode="numeric" value="1825" min="30"></label>
+        <label id="daysLab">回溯天数<input id="days" type="number" inputmode="numeric" value="1825" min="30"></label>
         <label>随机种子<input id="seed" type="number" inputmode="numeric" value="0"></label>
       </div>
       <div class="btns"><button id="gen">生成</button></div>
@@ -120,8 +126,10 @@ footer{text-align:center;font-size:12px;color:var(--mute);padding:18px 12px}
     <h2 id="qtitle"></h2>
     <div class="abs" id="qabs"></div>
 
-    <div class="lab">你判断的档位（必填）</div>
-    <div id="tiers" class="chips"></div>
+    <div id="tierBlock">
+      <div class="lab">你判断的档位（必填）</div>
+      <div id="tiers" class="chips"></div>
+    </div>
 
     <div class="lab">三轴（可选）</div>
     <div id="knobs"></div>
@@ -129,7 +137,7 @@ footer{text-align:center;font-size:12px;color:var(--mute);padding:18px 12px}
     <div class="lab">主张类型（可选）</div>
     <div id="typesel" class="chips"></div>
 
-    <label class="lab">一句话：主张 + 依据（可选）</label>
+    <label class="lab" id="basislab">一句话：主张 + 依据（可选）</label>
     <textarea id="basis" rows="3" placeholder="例：X通过Z使Y发生变化；依据是……"></textarea>
 
     <div class="btns"><button id="submit" disabled>提交并查看答案</button></div>
@@ -178,6 +186,17 @@ footer{text-align:center;font-size:12px;color:var(--mute);padding:18px 12px}
   </div>
 
   <div class="card">
+    <div class="lab" style="margin-top:0">Zotero题库（主张练习）</div>
+    <div id="bankstat" class="note" style="margin-top:0"></div>
+    <div class="btns" style="margin-top:10px">
+      <button id="bankimport" class="ghost small">导入 zotero_bank.json</button>
+      <button id="bankclear" class="ghost small">清空</button>
+    </div>
+    <input id="bankfile" type="file" accept="application/json,.json" class="hidden">
+    <div class="note">题库由电脑上的 <code>build_zotero_bank.py</code> 生成，只读你的 Zotero 库，不上传任何地方。手机端无法直接读 Zotero。</div>
+  </div>
+
+  <div class="card">
     <div class="lab" style="margin-top:0">数据</div>
     <div class="btns" style="margin-top:0"><button id="exportbtn" class="ghost small">导出JSON</button><button id="importbtn" class="ghost small">导入JSON</button></div>
     <input id="importfile" type="file" accept="application/json,.json" class="hidden">
@@ -209,6 +228,47 @@ const BAD_TYPES = new Set(['Review','Comment','Editorial','News','Letter','Case 
   'Published Erratum','Preprint','Retraction of Publication','Retracted Publication']);
 const MIN_ABSTRACT = 600;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ========== Zotero题库（IndexedDB，避免 localStorage 5MB 上限） ========== */
+const IDB_NAME = 'tp.bank', IDB_STORE = 'bank';
+function idb(){
+  return new Promise((res, rej) => {
+    if(!('indexedDB' in window)) return rej(new Error('浏览器不支持 IndexedDB'));
+    const r = indexedDB.open(IDB_NAME, 1);
+    r.onupgradeneeded = () => { if(!r.result.objectStoreNames.contains(IDB_STORE)) r.result.createObjectStore(IDB_STORE); };
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+async function bankGet(){
+  try{
+    const db = await idb();
+    return await new Promise((res, rej) => {
+      const t = db.transaction(IDB_STORE, 'readonly');
+      const q = t.objectStore(IDB_STORE).get('items');
+      q.onsuccess = () => res(q.result || null);
+      q.onerror = () => rej(q.error);
+    });
+  }catch(e){ return null; }
+}
+async function bankPut(bank){
+  const db = await idb();
+  return new Promise((res, rej) => {
+    const t = db.transaction(IDB_STORE, 'readwrite');
+    t.objectStore(IDB_STORE).put(bank, 'items');
+    t.oncomplete = () => res(true);
+    t.onerror = () => rej(t.error);
+  });
+}
+async function bankClear(){
+  const db = await idb();
+  return new Promise((res, rej) => {
+    const t = db.transaction(IDB_STORE, 'readwrite');
+    t.objectStore(IDB_STORE).delete('items');
+    t.oncomplete = () => res(true);
+    t.onerror = () => rej(t.error);
+  });
+}
 
 // 只对综合刊（Nature/Science/Cell/PNAS/Nat Commun）加生命科学限定；
 // 其余刊本身就是生物医学刊，不需要再加条件，避免漏检。
@@ -321,10 +381,45 @@ function pickByTier(cands, n, rng){
   return shuffle(picked, rng);
 }
 
+async function generateFromBank(n){
+  const log = m => { $('#genlog').textContent = m; };
+  const bank = await bankGet();
+  const items = (bank && bank.items || []).filter(x => x.title && x.abstract);
+  if(!items.length){
+    log('还没有题库。请到「设置」页导入 zotero_bank.json。');
+    return;
+  }
+  const used = new Set();
+  S.answers.forEach(a => a.key && used.add(a.key));
+  S.batches.forEach(b => (b.items || []).forEach(i => i.key && used.add(i.key)));
+
+  const seed = +$('#seed').value || 0;
+  const rng = seed ? mulberry32(seed) : Math.random;
+  let pool = items.filter(x => !used.has(x.key));
+  if(pool.length < n) pool = items.slice();
+  shuffle(pool, rng);
+  const picked = pool.slice(0, n);
+
+  const now = new Date();
+  const id = now.toISOString().replace(/[-:T]/g,'').slice(0,8) + '_'
+    + now.toTimeString().slice(0,8).replace(/:/g,'');
+  const batch = {id, created: now.toISOString().slice(0,10), mode: 'claim', source: 'zotero',
+    items: picked.map((p, i) => ({
+      id: 'P' + String(i + 1).padStart(2,'0'), key: p.key || '',
+      title: p.title, abstract: p.abstract, journal: p.journal || '',
+      year: p.year || '', abstract_source: p.abstract_source || ''
+    }))};
+  S.batches.unshift(batch); S.last = id; persist();
+  log(`已生成 ${picked.length} 篇（题库 ${items.length} 篇，已用 ${used.size} 篇）`);
+  $('#genpanel').open = false;
+  renderPractice();
+}
+
 async function generate(){
   const n = Math.max(1, Math.min(30, +$('#n').value || 10));
   const days = Math.max(30, +$('#days').value || 1825);
   const seed = +$('#seed').value || 0;
+  if($('#source').value === 'zotero') return generateFromBank(n);
   const rng = seed ? mulberry32(seed) : Math.random;
   const log = m => { $('#genlog').textContent = m; };
 
@@ -374,10 +469,11 @@ async function generate(){
   const now = new Date();
   const id = now.toISOString().replace(/[-:T]/g,'').slice(0,8) + '_'
     + now.toTimeString().slice(0,8).replace(/:/g,'');
-  const batch = {id, created: now.toISOString().slice(0,10), items: picked.map((p, i) => ({
-    id: 'P' + String(i + 1).padStart(2,'0'), pmid: p.pmid, title: p.title,
-    abstract: p.abstract, journal_name: p.journal_name, ring: p.ring, tier: p.tier
-  }))};
+  const batch = {id, created: now.toISOString().slice(0,10), mode: 'tier', source: 'pubmed',
+    items: picked.map((p, i) => ({
+      id: 'P' + String(i + 1).padStart(2,'0'), pmid: p.pmid, title: p.title,
+      abstract: p.abstract, journal_name: p.journal_name, ring: p.ring, tier: p.tier
+    }))};
   S.batches.unshift(batch);
   S.last = id;
   persist();
@@ -438,6 +534,12 @@ function gotoIdx(i){
   $('#next').disabled = idx === b.items.length - 1;
 
   const it = b.items[idx];
+  const isClaim = b.mode === 'claim';
+  $('#qcard').classList.toggle('claimmode', isClaim);
+  $('#tierBlock').classList.toggle('hidden', isClaim);
+  $('#basislab').textContent = isClaim
+    ? '主张句（必填；要能被反对：谁 对 什么 做了什么位移）'
+    : '一句话：主张 + 依据（可选）';
   const rec = answerOf(b, it);
   if(rec){ showReveal(rec, it); renderCoachSlot(rec, it); return; }
 
@@ -475,6 +577,7 @@ function renderKnobs(){
   const box = $('#knobs'); box.innerHTML = '';
   [['n','创新性'],['i','重要性'],['e','证据强度']].forEach(([k, name]) => {
     const row = document.createElement('div'); row.className = 'knob';
+    row.dataset.k = {n:'novelty', i:'importance', e:'evidence'}[k];
     const nm = document.createElement('span'); nm.textContent = name; row.appendChild(nm);
     const dots = document.createElement('div'); dots.className = 'dots';
     for(let v = 1; v <= 5; v++){
@@ -487,20 +590,36 @@ function renderKnobs(){
     row.appendChild(dots); box.appendChild(row);
   });
 }
-function refreshSubmit(){ $('#submit').disabled = !Q.tier; }
+function refreshSubmit(){
+  const b = curBatch();
+  $('#submit').disabled = (b && b.mode === 'claim')
+    ? !$('#basis').value.trim()
+    : !Q.tier;
+}
+$('#basis').addEventListener('input', refreshSubmit);
 
 /* ========== 提交 ========== */
 function submitAnswer(){
   const b = curBatch(); if(!b) return;
   const it = b.items[Q.idx];
-  if(!it || !Q.tier || answered(b, it)) return;
-  const rec = {
+  if(!it || answered(b, it)) return;
+  const isClaim = b.mode === 'claim';
+  const basis = $('#basis').value.trim();
+  if(isClaim ? !basis : !Q.tier) return;
+  const rec = isClaim ? {
+    mode: 'claim',
+    date: new Date().toISOString().slice(0,10),
+    batch: b.id, id: it.id, key: it.key || '', title: it.title, abstract: it.abstract,
+    journal: it.journal, year: it.year,
+    claim_sentence: basis, claim_type: Q.type || '',
+    novelty: Q.knobs.n, importance: Q.knobs.i, evidence: Q.knobs.e
+  } : {
     date: new Date().toISOString().slice(0,10),
     batch: b.id, id: it.id, pmid: it.pmid, title: it.title, abstract: it.abstract,
     journal: it.journal_name, ring: it.ring, actual_tier: it.tier,
     pred_tier: Q.tier, delta: Q.tier - it.tier,
     novelty: Q.knobs.n, importance: Q.knobs.i, evidence: Q.knobs.e,
-    basis: $('#basis').value.trim(),
+    basis: basis,
     claim_type: Q.type, claim_sentence: ''
   };
   S.answers.push(rec); persist();
@@ -520,6 +639,17 @@ function submitAnswer(){
 function showReveal(rec, it){
   $('#qcard').classList.add('hidden');
   $('#reveal').classList.remove('hidden');
+  if(rec.mode === 'claim'){
+    const v = $('#verdict');
+    v.className = 'verdict';
+    v.textContent = '主张已提交';
+    $('#revj').innerHTML = '你写的：<b>' + escapeHTML(rec.claim_sentence || '') + '</b><br>'
+      + '类型：' + escapeHTML(rec.claim_type || '未选')
+      + ' · 证据强度：' + (rec.evidence || '未填') + '/5';
+    $('#coachbox').classList.add('hidden');
+    $('#coachbox').innerHTML = '';
+    return;
+  }
   const d = dl(rec);
   let cls = 'ok', txt = '完全命中';
   if(d > 0){ cls = 'under'; txt = `低估 ${d} 档`; }
@@ -574,6 +704,31 @@ const COACH_SYS = '你是科研写作与投稿判断的教练。用户先自己�
  + '"rule":"一条可迁移规则，不超过30字，写成可执行动作",'
  + '"next_time":"下次遇到这类文章先看什么，1-2句"}';
 
+const CLAIM_SYS = '你是科研写作教练。用户读了一篇论文的标题和摘要，写了一句主张句、选了主张类型、给了证据强度。'
+ + '你的任务是给出标准答案，再逐项评价他的答案。不要评文笔，不要夸奖。\n'
+ + '主张类型六类：描述/关联/因果/机制/规则·原则/资源·方法。类型决定上限，证据决定是否成立。\n'
+ + '规则：\n'
+ + '1. 只依据标题和摘要。摘要里没有的内容一律不要写；信息不足就直接说不足。\n'
+ + '2. 标准主张句必须可被反对：有具体主语、有方向、有范围或量词。'
+ + '反例："本研究探讨了X在Y中的作用"；正例："X通过Z使Y失活，因此X缺失时Y持续激活"。\n'
+ + '3. 标准类型按摘要实际支持到哪一层判定，不看作者措辞。只做了关联分析的，不能判成因果或机制。\n'
+ + '4. 评价用户的句子：能否被反对、量词是否超出证据、是否只是复述了摘要的卖点。\n'
+ + '5. 指出要让这句主张真正成立，还缺哪一类承重证据，一句话说清。\n'
+ + '6. 三轴各1–5分，标准分按摘要判：创新性=结论与该领域默认答案的距离（1基本重复已知；5改写默认答案）；'
+ + '重要性=受众面（1小众技术细节；5跨领域广泛关注）；证据强度=因果链闭合度（1相关性或单一模型；5判决性证据齐备）。'
+ + '用户填了就对比，没填标 null。每条轴的评语必须引用摘要里的具体依据。\n'
+ + '7. 规则要写成"看到X就先查Y"这种可执行动作。\n'
+ + '只输出严格JSON，不要代码块：\n'
+ + '{"std_claim":"标准主张句，不超过40字，可被反对",'
+ + '"std_type":"描述|关联|因果|机制|规则·原则|资源·方法",'
+ + '"axes":[{"axis":"创新性","yours":整数或null,"std":整数,"comment":"1-2句，摘要里的依据"},'
+ + '{"axis":"重要性",...},{"axis":"证据强度",...}],'
+ + '"claim_review":"2-4句：用户的主张句哪里对、哪里不对",'
+ + '"type_review":"2-3句：类型选对没有，摘要实际支持到哪一层",'
+ + '"missing_evidence":"一句话：要让这句主张成立，还缺什么证据",'
+ + '"rule":"一条可迁移规则，不超过30字，写成可执行动作",'
+ + '"next_time":"下次写主张句先做什么，1-2句"}';
+
 async function chatJSON(system, user){
   const st = S.settings;
   if(!st.key) throw new Error('未配置AI密钥（设置页填写）');
@@ -606,6 +761,13 @@ function s(x, n){ return String(x == null ? '' : x).slice(0, n); }
 function coachKey(rec){ return rec.batch + '/' + rec.id + '/v2'; }
 
 function coachPrompt(rec, it){
+  if(rec.mode === 'claim'){
+    return `标题：${it.title}
+摘要：${it.abstract}
+用户写的主张句：${rec.claim_sentence || '（未填写）'}
+用户判断的主张类型：${rec.claim_type || '（未选）'}
+用户给的证据强度：${rec.evidence || '未填'}（1-5）`;
+  }
   const d = dl(rec);
   return `标题：${it.title}
 摘要：${it.abstract}
@@ -619,6 +781,25 @@ function coachPrompt(rec, it){
 async function loadCoach(rec, it){
   const k = coachKey(rec);
   if(S.coach[k]) return S.coach[k];
+  if(rec.mode === 'claim'){
+    const o = await chatJSON(CLAIM_SYS, coachPrompt(rec, it));
+    const f = {
+      v: 2, mode: 'claim',
+      std_claim: s(o.std_claim, 240), std_type: s(o.std_type, 20),
+      axes: Array.isArray(o.axes) ? o.axes.slice(0,3).map((a, i) => ({
+        axis: s(a.axis, 20) || ['创新性','重要性','证据强度'][i],
+        yours: a.yours == null ? null : clamp(a.yours, 1, 5, null),
+        std: a.std == null ? null : clamp(a.std, 1, 5, null),
+        comment: s(a.comment, 400)
+      })) : [],
+      claim_review: s(o.claim_review, 600), type_review: s(o.type_review, 500),
+      missing_evidence: s(o.missing_evidence, 300),
+      rule: s(o.rule, 60), next_time: s(o.next_time, 400)
+    };
+    if(!f.std_claim && !f.claim_review) throw new Error('AI返回缺少评价内容');
+    S.coach[k] = f; persist();
+    return f;
+  }
   const out = await chatJSON(COACH_SYS, coachPrompt(rec, it));
   const f = {
     v: 2,
@@ -643,7 +824,30 @@ async function loadCoach(rec, it){
   return f;
 }
 
+function claimCoachHTML(f){
+  const sec = (lab, txt) => txt
+    ? `<div class="ln" style="margin-top:8px"><b>${lab}：</b>${escapeHTML(txt)}</div>` : '';
+  let h = '<div class="bt">评价与建议</div>';
+  h += '<div class="ln" style="margin-top:6px;color:#1f4e79;font-weight:600">标准主张</div>';
+  h += `<div class="dclaim"><b>${f.std_type ? '〔' + escapeHTML(f.std_type) + '〕' : ''}</b> `
+    + escapeHTML(f.std_claim || '') + '</div>';
+  (f.axes || []).forEach(a => {
+    const cls = a.yours == null ? '' : (a.yours > a.std ? 'hi' : a.yours < a.std ? 'lo' : 'eq');
+    h += `<div class="axisline"><span>${escapeHTML(a.axis)}</span>`
+      + (cls ? `<span class="badge ${cls}">${a.yours > a.std ? '判高' : a.yours < a.std ? '判低' : '接近'}</span>` : '')
+      + `<span style="font-size:12px;color:#6b7785">你 ${a.yours == null ? '未填' : a.yours} / 标准 ${a.std == null ? '-' : a.std}</span></div>`
+      + `<div style="font-size:13px;color:#4b5563;margin-bottom:6px">${escapeHTML(a.comment)}</div>`;
+  });
+  h += sec('你的主张句', f.claim_review);
+  h += sec('类型', f.type_review);
+  h += sec('还缺什么证据', f.missing_evidence);
+  if(f.rule) h += `<div class="ln" style="margin-top:8px;color:#1f4e79">规则：${escapeHTML(f.rule)}</div>`;
+  if(f.next_time) h += `<div class="ln" style="color:#4b5563">${escapeHTML(f.next_time)}</div>`;
+  return h;
+}
+
 function coachHTML(f){
+  if(f && f.mode === 'claim') return claimCoachHTML(f);
   let h = '<div class="bt">评价与建议</div>';
   if(f.headline) h += `<div class="ln"><b>${escapeHTML(f.headline)}</b></div>`;
 
@@ -698,7 +902,9 @@ function renderCoachSlot(rec, it){
 
 /* ========== 历史 ========== */
 function renderHistory(){
-  const A = S.answers.slice().reverse();
+  const all = S.answers.slice().reverse();
+  const claims = all.filter(a => a.mode === 'claim');
+  const A = all.filter(a => a.mode !== 'claim');
   const n = A.length;
   const V = A.filter(okRec), m = V.length;
   const exact = V.filter(a => dl(a) === 0).length;
@@ -741,13 +947,57 @@ function renderHistory(){
     row.onclick = () => det.classList.toggle('hidden');
     list.appendChild(row); list.appendChild(det);
   });
-  if(n){
+  // 主张练习记录
+  if(claims.length){
+    const hd = document.createElement('div');
+    hd.className = 'note';
+    hd.style.cssText = 'padding:14px 4px 6px;font-size:13px;color:#1f4e79;font-weight:600';
+    hd.textContent = `主张练习 ${claims.length} 条（不计入上面的命中统计）`;
+    list.appendChild(hd);
+    claims.forEach(a => {
+      const row = document.createElement('div');
+      row.className = 'hrow';
+      row.innerHTML = `<span class="m">${a.date} · ${a.batch}/${a.id}</span>`
+        + `<span style="flex:1"></span>`
+        + `<span>${escapeHTML(a.claim_type || '未选')} · 证据 ${a.evidence || '—'}</span>`;
+      const det = document.createElement('div');
+      det.className = 'hdetail hidden';
+      try{ det.innerHTML = claimHistDetail(a); }
+      catch(e){ det.innerHTML = `<div class="dmeta" style="color:#a11b1b">渲染失败：${e.message||e}</div>`; }
+      row.onclick = () => det.classList.toggle('hidden');
+      const btn = det.querySelector('.cbtn');
+      if(btn) btn.onclick = async ev => {
+        ev.stopPropagation();
+        btn.disabled = true; btn.textContent = '生成中…';
+        try{ await loadCoach(a, {title: a.title, abstract: a.abstract});
+             det.innerHTML = claimHistDetail(a); }
+        catch(e){ btn.disabled = false; btn.textContent = '生成'; }
+      };
+      list.appendChild(row); list.appendChild(det);
+    });
+  }
+
+  if(all.length){
     const foot = document.createElement('div');
     foot.className = 'note';
     foot.style.padding = '10px 4px';
-    foot.textContent = `以上共 ${n} 条记录`;
+    foot.textContent = `以上共 ${all.length} 条记录`;
     list.appendChild(foot);
   }
+}
+
+function claimHistDetail(a){
+  let h = `<div class="dmeta">${escapeHTML(a.journal || '')}${a.year ? ' · ' + escapeHTML(a.year) : ''}</div>`;
+  h += `<div><b>${escapeHTML(a.title || '')}</b></div>`;
+  h += `<div class="dclaim"><b>${a.claim_type ? '〔' + escapeHTML(a.claim_type) + '〕' : ''}</b> `
+    + escapeHTML(a.claim_sentence || '') + '</div>';
+  h += `<div style="font-size:13px;color:#6b7785;margin:6px 0">证据强度：${a.evidence || '未填'}/5</div>`;
+  if(a.abstract) h += `<div style="font-size:13px;line-height:1.65;color:#3b4550;margin:8px 0">${escapeHTML(a.abstract)}</div>`;
+  const f = S.coach[coachKey(a)];
+  h += '<div class="box">' + (f ? coachHTML(f)
+    : `<div class="bt">评价与建议</div><div class="ln" style="color:#6b7785">未生成</div>
+       <button class="cbtn small ghost" style="margin-top:6px">生成</button>`) + '</div>';
+  return h;
 }
 
 function histDetail(a){
@@ -768,8 +1018,8 @@ function escapeHTML(x){ return String(x||'').replace(/[&<>"]/g, c => ({'&':'&amp
 
 /* ========== 分析 ========== */
 function renderStats(){
-  const A = S.answers;
-  if(!A.length){ $('#anpanel').innerHTML = '<div style="color:#6b7785">还没有数据。</div>'; return; }
+  const A = S.answers.filter(a => a.mode !== 'claim');
+  if(!A.length){ $('#anpanel').innerHTML = '<div style="color:#6b7785">还没有档位判断记录。</div>'; return; }
   const m = {};
   TORDER.forEach(p => { m[p] = {}; TORDER.forEach(a2 => m[p][a2] = 0); });
   A.forEach(a => { if(m[a.pred_tier] && m[a.pred_tier][a.actual_tier] !== undefined) m[a.pred_tier][a.actual_tier]++; });
@@ -836,7 +1086,34 @@ function renderSettings(){
   $('#apikey').value = S.settings.key || '';
   $('#aibase').value = S.settings.base || 'https://api.deepseek.com/v1';
   $('#aimodel').value = S.settings.model || 'deepseek-chat';
+  bankGet().then(b => {
+    $('#bankstat').textContent = (b && b.items && b.items.length)
+      ? `已导入 ${b.items.length} 篇${b.built ? '（构建于 ' + b.built + '）' : ''}`
+      : '未导入题库。未导入时「Zotero库」来源不可用。';
+  }).catch(() => { $('#bankstat').textContent = '读取题库失败'; });
 }
+
+$('#bankimport').onclick = () => $('#bankfile').click();
+$('#bankfile').onchange = async e => {
+  const f = e.target.files[0]; if(!f) return;
+  try{
+    const d = JSON.parse(await f.text());
+    if(!d || !Array.isArray(d.items)) throw new Error('不是 zotero_bank.json 格式');
+    await bankPut(d);
+    renderSettings();
+    alert(`已导入 ${d.items.length} 篇`);
+  }catch(err){ alert('导入失败：' + err.message); }
+  e.target.value = '';
+};
+$('#bankclear').onclick = async () => {
+  if(!confirm('清空已导入的 Zotero 题库？作答记录不受影响。')) return;
+  await bankClear(); renderSettings();
+};
+
+$('#source').onchange = () => {
+  const z = $('#source').value === 'zotero';
+  $('#daysLab').classList.toggle('hidden', z);
+};
 $('#savecfg').onclick = () => {
   S.settings.key = $('#apikey').value.trim();
   S.settings.base = $('#aibase').value.trim() || 'https://api.deepseek.com/v1';
