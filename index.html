@@ -280,7 +280,7 @@ const BIO_FILTER = '(' + [
   'mice[tiab]','mouse[tiab]','"in vivo"[tiab]'
 ].join(' OR ') + ')';
 
-const blank = () => ({v:1, batches:[], answers:[], judgments:{}, coach:{}, last:'',
+const blank = () => ({v:1, batches:[], answers:[], judgments:{}, coach:{}, chat:{}, last:'',
   settings:{key:'', base:'https://api.deepseek.com/v1', model:'deepseek-chat'}});
 
 function load(){
@@ -384,9 +384,9 @@ function pickByTier(cands, n, rng){
 async function generateFromBank(n){
   const log = m => { $('#genlog').textContent = m; };
   const bank = await bankGet();
-  const items = (bank && bank.items || []).filter(x => x.title && x.abstract);
+  const items = (bank && bank.items || []).filter(x => x.title && x.abstract && x.tier);
   if(!items.length){
-    log('还没有题库。请到「设置」页导入 zotero_bank.json。');
+    log('还没有可用题库。请到「设置」页导入 zotero_bank.json（需含档位）。');
     return;
   }
   const used = new Set();
@@ -395,19 +395,36 @@ async function generateFromBank(n){
 
   const seed = +$('#seed').value || 0;
   const rng = seed ? mulberry32(seed) : Math.random;
-  let pool = items.filter(x => !used.has(x.key));
-  if(pool.length < n) pool = items.slice();
-  shuffle(pool, rng);
-  const picked = pool.slice(0, n);
+
+  // 按档位分层，和 PubMed 一致
+  const byT = {};
+  items.forEach(x => { const t = +x.tier; if(t >= 1 && t <= 5) (byT[t] = byT[t] || []).push(x); });
+  Object.values(byT).forEach(a => shuffle(a, rng));
+  const base = Math.floor(n / 5);
+  const quota = {}; [1,2,3,4,5].forEach(t => quota[t] = base);
+  shuffle([1,2,3,4,5], rng).slice(0, n - base * 5).forEach(t => quota[t]++);
+
+  const picked = [], spare = [];
+  [1,2,3,4,5].forEach(t => {
+    const pool = byT[t] || [];
+    const fresh = pool.filter(x => !used.has(x.key));
+    const take = (fresh.length ? fresh : pool).slice(0, quota[t]);
+    picked.push(...take);
+    spare.push(...pool.filter(x => !take.includes(x)));
+  });
+  const short = n - picked.length;
+  if(short > 0){ shuffle(spare, rng); picked.push(...spare.slice(0, short)); }
+  shuffle(picked, rng);
+  if(!picked.length){ log('题库里没有带档位的条目。'); return; }
 
   const now = new Date();
   const id = now.toISOString().replace(/[-:T]/g,'').slice(0,8) + '_'
-    + now.toTimeString().slice(0,8).replace(/:/g,'');
-  const batch = {id, created: now.toISOString().slice(0,10), mode: 'claim', source: 'zotero',
+    + now.toTimeString().slice(0,8).replace(/:/g,'') + '_zt';
+  const batch = {id, created: now.toISOString().slice(0,10), mode: 'tier', source: 'zotero',
     items: picked.map((p, i) => ({
       id: 'P' + String(i + 1).padStart(2,'0'), key: p.key || '',
-      title: p.title, abstract: p.abstract, journal: p.journal || '',
-      year: p.year || '', abstract_source: p.abstract_source || ''
+      title: p.title, abstract: p.abstract, journal_name: p.journal || '',
+      ring: 'zotero', tier: +p.tier, year: p.year || ''
     }))};
   S.batches.unshift(batch); S.last = id; persist();
   log(`已生成 ${picked.length} 篇（题库 ${items.length} 篇，已用 ${used.size} 篇）`);
@@ -508,7 +525,7 @@ function renderPractice(){
   S.batches.forEach(x => {
     const o = document.createElement('option');
     o.value = x.id;
-    o.textContent = `${x.created} · ${x.items.length}篇 · 已答 ${S.answers.filter(a => a.batch === x.id).length}`;
+    o.textContent = `${x.created} · ${x.source === 'zotero' ? 'Zotero' : 'PubMed'} · ${x.items.length}篇 · 已答 ${S.answers.filter(a => a.batch === x.id).length}`;
     if(b && x.id === b.id) o.selected = true;
     sel.appendChild(o);
   });
@@ -534,14 +551,11 @@ function gotoIdx(i){
   $('#next').disabled = idx === b.items.length - 1;
 
   const it = b.items[idx];
-  const isClaim = b.mode === 'claim';
-  $('#qcard').classList.toggle('claimmode', isClaim);
-  $('#tierBlock').classList.toggle('hidden', isClaim);
-  $('#basislab').textContent = isClaim
-    ? '主张句（必填；要能被反对：谁 对 什么 做了什么位移）'
-    : '一句话：主张 + 依据（可选）';
+  $('#qcard').classList.remove('claimmode');
+  $('#tierBlock').classList.remove('hidden');
+  $('#basislab').textContent = '一句话：主张 + 依据（可选）';
   const rec = answerOf(b, it);
-  if(rec){ showReveal(rec, it); renderCoachSlot(rec, it); return; }
+  if(rec){ showReveal(rec, it); mountChat(rec, it); renderCoachSlot(rec, it); return; }
 
   $('#reveal').classList.add('hidden');
   $('#qcard').classList.remove('hidden');
@@ -591,10 +605,7 @@ function renderKnobs(){
   });
 }
 function refreshSubmit(){
-  const b = curBatch();
-  $('#submit').disabled = (b && b.mode === 'claim')
-    ? !$('#basis').value.trim()
-    : !Q.tier;
+  $('#submit').disabled = !Q.tier;
 }
 $('#basis').addEventListener('input', refreshSubmit);
 
@@ -603,19 +614,13 @@ function submitAnswer(){
   const b = curBatch(); if(!b) return;
   const it = b.items[Q.idx];
   if(!it || answered(b, it)) return;
-  const isClaim = b.mode === 'claim';
   const basis = $('#basis').value.trim();
-  if(isClaim ? !basis : !Q.tier) return;
-  const rec = isClaim ? {
-    mode: 'claim',
+  if(!Q.tier) return;
+  const rec = {
     date: new Date().toISOString().slice(0,10),
-    batch: b.id, id: it.id, key: it.key || '', title: it.title, abstract: it.abstract,
-    journal: it.journal, year: it.year,
-    claim_sentence: basis, claim_type: Q.type || '',
-    novelty: Q.knobs.n, importance: Q.knobs.i, evidence: Q.knobs.e
-  } : {
-    date: new Date().toISOString().slice(0,10),
-    batch: b.id, id: it.id, pmid: it.pmid, title: it.title, abstract: it.abstract,
+    source: b.source || 'pubmed',
+    batch: b.id, id: it.id, pmid: it.pmid || '', key: it.key || '',
+    title: it.title, abstract: it.abstract,
     journal: it.journal_name, ring: it.ring, actual_tier: it.tier,
     pred_tier: Q.tier, delta: Q.tier - it.tier,
     novelty: Q.knobs.n, importance: Q.knobs.i, evidence: Q.knobs.e,
@@ -625,6 +630,7 @@ function submitAnswer(){
   S.answers.push(rec); persist();
   const key = b.id + '/' + it.id;
   showReveal(rec, it);
+  mountChat(rec, it);
   $('#coachbox').classList.remove('hidden');
   $('#coachbox').innerHTML = '<div class="bt">评价与建议</div><div class="ln" style="color:#6b7785">生成中…</div>';
   loadCoach(rec, it)
@@ -639,17 +645,6 @@ function submitAnswer(){
 function showReveal(rec, it){
   $('#qcard').classList.add('hidden');
   $('#reveal').classList.remove('hidden');
-  if(rec.mode === 'claim'){
-    const v = $('#verdict');
-    v.className = 'verdict';
-    v.textContent = '主张已提交';
-    $('#revj').innerHTML = '你写的：<b>' + escapeHTML(rec.claim_sentence || '') + '</b><br>'
-      + '类型：' + escapeHTML(rec.claim_type || '未选')
-      + ' · 证据强度：' + (rec.evidence || '未填') + '/5';
-    $('#coachbox').classList.add('hidden');
-    $('#coachbox').innerHTML = '';
-    return;
-  }
   const d = dl(rec);
   let cls = 'ok', txt = '完全命中';
   if(d > 0){ cls = 'under'; txt = `低估 ${d} 档`; }
@@ -704,31 +699,6 @@ const COACH_SYS = '你是科研写作与投稿判断的教练。用户先自己�
  + '"rule":"一条可迁移规则，不超过30字，写成可执行动作",'
  + '"next_time":"下次遇到这类文章先看什么，1-2句"}';
 
-const CLAIM_SYS = '你是科研写作教练。用户读了一篇论文的标题和摘要，写了一句主张句、选了主张类型、给了证据强度。'
- + '你的任务是给出标准答案，再逐项评价他的答案。不要评文笔，不要夸奖。\n'
- + '主张类型六类：描述/关联/因果/机制/规则·原则/资源·方法。类型决定上限，证据决定是否成立。\n'
- + '规则：\n'
- + '1. 只依据标题和摘要。摘要里没有的内容一律不要写；信息不足就直接说不足。\n'
- + '2. 标准主张句必须可被反对：有具体主语、有方向、有范围或量词。'
- + '反例："本研究探讨了X在Y中的作用"；正例："X通过Z使Y失活，因此X缺失时Y持续激活"。\n'
- + '3. 标准类型按摘要实际支持到哪一层判定，不看作者措辞。只做了关联分析的，不能判成因果或机制。\n'
- + '4. 评价用户的句子：能否被反对、量词是否超出证据、是否只是复述了摘要的卖点。\n'
- + '5. 指出要让这句主张真正成立，还缺哪一类承重证据，一句话说清。\n'
- + '6. 三轴各1–5分，标准分按摘要判：创新性=结论与该领域默认答案的距离（1基本重复已知；5改写默认答案）；'
- + '重要性=受众面（1小众技术细节；5跨领域广泛关注）；证据强度=因果链闭合度（1相关性或单一模型；5判决性证据齐备）。'
- + '用户填了就对比，没填标 null。每条轴的评语必须引用摘要里的具体依据。\n'
- + '7. 规则要写成"看到X就先查Y"这种可执行动作。\n'
- + '只输出严格JSON，不要代码块：\n'
- + '{"std_claim":"标准主张句，不超过40字，可被反对",'
- + '"std_type":"描述|关联|因果|机制|规则·原则|资源·方法",'
- + '"axes":[{"axis":"创新性","yours":整数或null,"std":整数,"comment":"1-2句，摘要里的依据"},'
- + '{"axis":"重要性",...},{"axis":"证据强度",...}],'
- + '"claim_review":"2-4句：用户的主张句哪里对、哪里不对",'
- + '"type_review":"2-3句：类型选对没有，摘要实际支持到哪一层",'
- + '"missing_evidence":"一句话：要让这句主张成立，还缺什么证据",'
- + '"rule":"一条可迁移规则，不超过30字，写成可执行动作",'
- + '"next_time":"下次写主张句先做什么，1-2句"}';
-
 async function chatJSON(system, user){
   const st = S.settings;
   if(!st.key) throw new Error('未配置AI密钥（设置页填写）');
@@ -761,13 +731,6 @@ function s(x, n){ return String(x == null ? '' : x).slice(0, n); }
 function coachKey(rec){ return rec.batch + '/' + rec.id + '/v2'; }
 
 function coachPrompt(rec, it){
-  if(rec.mode === 'claim'){
-    return `标题：${it.title}
-摘要：${it.abstract}
-用户写的主张句：${rec.claim_sentence || '（未填写）'}
-用户判断的主张类型：${rec.claim_type || '（未选）'}
-用户给的证据强度：${rec.evidence || '未填'}（1-5）`;
-  }
   const d = dl(rec);
   return `标题：${it.title}
 摘要：${it.abstract}
@@ -781,25 +744,6 @@ function coachPrompt(rec, it){
 async function loadCoach(rec, it){
   const k = coachKey(rec);
   if(S.coach[k]) return S.coach[k];
-  if(rec.mode === 'claim'){
-    const o = await chatJSON(CLAIM_SYS, coachPrompt(rec, it));
-    const f = {
-      v: 2, mode: 'claim',
-      std_claim: s(o.std_claim, 240), std_type: s(o.std_type, 20),
-      axes: Array.isArray(o.axes) ? o.axes.slice(0,3).map((a, i) => ({
-        axis: s(a.axis, 20) || ['创新性','重要性','证据强度'][i],
-        yours: a.yours == null ? null : clamp(a.yours, 1, 5, null),
-        std: a.std == null ? null : clamp(a.std, 1, 5, null),
-        comment: s(a.comment, 400)
-      })) : [],
-      claim_review: s(o.claim_review, 600), type_review: s(o.type_review, 500),
-      missing_evidence: s(o.missing_evidence, 300),
-      rule: s(o.rule, 60), next_time: s(o.next_time, 400)
-    };
-    if(!f.std_claim && !f.claim_review) throw new Error('AI返回缺少评价内容');
-    S.coach[k] = f; persist();
-    return f;
-  }
   const out = await chatJSON(COACH_SYS, coachPrompt(rec, it));
   const f = {
     v: 2,
@@ -824,30 +768,7 @@ async function loadCoach(rec, it){
   return f;
 }
 
-function claimCoachHTML(f){
-  const sec = (lab, txt) => txt
-    ? `<div class="ln" style="margin-top:8px"><b>${lab}：</b>${escapeHTML(txt)}</div>` : '';
-  let h = '<div class="bt">评价与建议</div>';
-  h += '<div class="ln" style="margin-top:6px;color:#1f4e79;font-weight:600">标准主张</div>';
-  h += `<div class="dclaim"><b>${f.std_type ? '〔' + escapeHTML(f.std_type) + '〕' : ''}</b> `
-    + escapeHTML(f.std_claim || '') + '</div>';
-  (f.axes || []).forEach(a => {
-    const cls = a.yours == null ? '' : (a.yours > a.std ? 'hi' : a.yours < a.std ? 'lo' : 'eq');
-    h += `<div class="axisline"><span>${escapeHTML(a.axis)}</span>`
-      + (cls ? `<span class="badge ${cls}">${a.yours > a.std ? '判高' : a.yours < a.std ? '判低' : '接近'}</span>` : '')
-      + `<span style="font-size:12px;color:#6b7785">你 ${a.yours == null ? '未填' : a.yours} / 标准 ${a.std == null ? '-' : a.std}</span></div>`
-      + `<div style="font-size:13px;color:#4b5563;margin-bottom:6px">${escapeHTML(a.comment)}</div>`;
-  });
-  h += sec('你的主张句', f.claim_review);
-  h += sec('类型', f.type_review);
-  h += sec('还缺什么证据', f.missing_evidence);
-  if(f.rule) h += `<div class="ln" style="margin-top:8px;color:#1f4e79">规则：${escapeHTML(f.rule)}</div>`;
-  if(f.next_time) h += `<div class="ln" style="color:#4b5563">${escapeHTML(f.next_time)}</div>`;
-  return h;
-}
-
 function coachHTML(f){
-  if(f && f.mode === 'claim') return claimCoachHTML(f);
   let h = '<div class="bt">评价与建议</div>';
   if(f.headline) h += `<div class="ln"><b>${escapeHTML(f.headline)}</b></div>`;
 
@@ -879,6 +800,85 @@ function coachHTML(f){
   return h;
 }
 
+/* ---- 继续讨论 ---- */
+const CHAT_SYS = '你是科研写作与投稿判断的教练。下面给出用户正在练习的文章、他的作答和此前的评价。'
+  + '基于这些材料回答他的追问。\n规则：只依据给定材料，摘要里没有的不要编造；'
+  + '回答要具体，引用摘要原句或给出可执行的动作；不要重复已有评价里的结论；中文，简洁。';
+
+async function chatMulti(messages){
+  const st = S.settings;
+  if(!st.key) throw new Error('未配置AI密钥（设置页填写）');
+  const base = (st.base || 'https://api.deepseek.com/v1').replace(/\/+$/,'');
+  const r = await fetch(base + '/chat/completions', {
+    method:'POST',
+    headers:{'Content-Type':'application/json', 'Authorization':'Bearer ' + st.key},
+    body: JSON.stringify({model: st.model || 'deepseek-chat', messages,
+      temperature: 0.4, max_tokens: 1200})
+  });
+  if(!r.ok) throw new Error('AI请求失败 HTTP ' + r.status);
+  const d = await r.json();
+  return ((d.choices && d.choices[0] && d.choices[0].message.content) || '').trim();
+}
+
+function chatContext(rec, it){
+  const f = S.coach[coachKey(rec)] || {};
+  const L = [`标题：${it.title}`, '', `摘要：${it.abstract}`, '',
+    `实际发表：${it.journal_name}（${TNAME[it.tier] || it.tier}）`,
+    `用户判断：${TNAME[rec.pred_tier] || rec.pred_tier}（${rec.delta === 0 ? '命中' : '有偏差'}）`];
+  if(rec.basis) L.push(`用户的依据：${rec.basis}`);
+  if(rec.claim_type) L.push(`用户的主张类型：${rec.claim_type}`);
+  if(f.std_claim) L.push('', `此前的标准判断：${f.std_claim}（类型：${f.std_type || ''}）`,
+    `档位理由：${f.why_tier || ''}`);
+  return CHAT_SYS + '\n\n' + L.join('\n');
+}
+
+function mountChat(rec, it){
+  const box = $('#reveal');
+  const div = document.createElement('div');
+  div.className = 'box';
+  div.id = 'chatbox';
+  div.innerHTML = `<div class="bt">继续讨论</div>
+    <div id="chatlog" style="max-height:300px;overflow:auto"></div>
+    <textarea id="chatin" rows="2" placeholder="就这篇文章或你这次的判断追问，例如「这条证据为什么不够判决性」" style="margin-top:8px"></textarea>
+    <button id="chatsend" class="small ghost" style="margin-top:8px">发送</button>`;
+  box.appendChild(div);
+  renderChat(rec, it);
+  $('#chatsend').onclick = () => sendChat(rec, it);
+}
+
+function renderChat(rec, it){
+  const log = $('#chatlog'); if(!log) return;
+  const h = (S.chat && S.chat[coachKey(rec)]) || [];
+  log.innerHTML = h.length
+    ? h.map(m => `<div style="margin:6px 0;font-size:13.5px;line-height:1.7;white-space:pre-wrap;
+        ${m.role === 'assistant' ? 'background:#f8fafc;border-radius:8px;padding:8px 10px;color:#3c4650' : 'color:#1f4e79'}">
+        <span style="font-size:11.5px;color:#6b7785;display:block">${m.role === 'assistant' ? '教练' : '我'}</span>
+        ${escapeHTML(m.content)}</div>`).join('')
+    : '<div style="font-size:13px;color:#6b7785">可以就这篇文章或你这次的判断继续追问。</div>';
+  log.scrollTop = log.scrollHeight;
+}
+
+async function sendChat(rec, it){
+  const ta = $('#chatin'), btn = $('#chatsend');
+  if(!ta || !btn) return;
+  const text = ta.value.trim(); if(!text) return;
+  const k = coachKey(rec);
+  S.chat = S.chat || {};
+  S.chat[k] = S.chat[k] || [];
+  S.chat[k].push({role:'user', content:text});
+  ta.value = ''; renderChat(rec, it); persist();
+  btn.disabled = true; btn.textContent = '思考中…';
+  try{
+    const reply = await chatMulti([{role:'system', content: chatContext(rec, it)}]
+      .concat(S.chat[k].slice(-12)));
+    S.chat[k].push({role:'assistant', content: reply});
+  }catch(e){
+    S.chat[k].push({role:'assistant', content:'（出错）' + e.message});
+  }
+  persist(); renderChat(rec, it);
+  btn.disabled = false; btn.textContent = '发送';
+}
+
 function renderCoachSlot(rec, it){
   const box = $('#coachbox');
   box.classList.remove('hidden');
@@ -903,10 +903,8 @@ function renderCoachSlot(rec, it){
 /* ========== 历史 ========== */
 function renderHistory(){
   const all = S.answers.slice().reverse();
-  const claims = all.filter(a => a.mode === 'claim');
-  const A = all.filter(a => a.mode !== 'claim');
-  const n = A.length;
-  const V = A.filter(okRec), m = V.length;
+  const n = all.length;
+  const V = all.filter(okRec), m = V.length;
   const exact = V.filter(a => dl(a) === 0).length;
   const one = V.filter(a => Math.abs(dl(a)) === 1).length;
   const off = m - exact - one;
@@ -918,7 +916,8 @@ function renderHistory(){
     : '还没有作答记录。';
 
   const list = $('#hlist'); list.innerHTML = '';
-  A.forEach(a => {
+
+  const addRow = a => {
     const d = dl(a);
     const row = document.createElement('div');
     row.className = 'hrow';
@@ -946,36 +945,18 @@ function renderHistory(){
     paint();
     row.onclick = () => det.classList.toggle('hidden');
     list.appendChild(row); list.appendChild(det);
-  });
-  // 主张练习记录
-  if(claims.length){
+  };
+
+  [['PubMed', all.filter(a => (a.source || 'pubmed') !== 'zotero')],
+   ['Zotero库', all.filter(a => a.source === 'zotero')]].forEach(([title, rows]) => {
+    if(!rows.length) return;
     const hd = document.createElement('div');
     hd.className = 'note';
     hd.style.cssText = 'padding:14px 4px 6px;font-size:13px;color:#1f4e79;font-weight:600';
-    hd.textContent = `主张练习 ${claims.length} 条（不计入上面的命中统计）`;
+    hd.textContent = `${title}（${rows.length} 条）`;
     list.appendChild(hd);
-    claims.forEach(a => {
-      const row = document.createElement('div');
-      row.className = 'hrow';
-      row.innerHTML = `<span class="m">${a.date} · ${a.batch}/${a.id}</span>`
-        + `<span style="flex:1"></span>`
-        + `<span>${escapeHTML(a.claim_type || '未选')} · 证据 ${a.evidence || '—'}</span>`;
-      const det = document.createElement('div');
-      det.className = 'hdetail hidden';
-      try{ det.innerHTML = claimHistDetail(a); }
-      catch(e){ det.innerHTML = `<div class="dmeta" style="color:#a11b1b">渲染失败：${e.message||e}</div>`; }
-      row.onclick = () => det.classList.toggle('hidden');
-      const btn = det.querySelector('.cbtn');
-      if(btn) btn.onclick = async ev => {
-        ev.stopPropagation();
-        btn.disabled = true; btn.textContent = '生成中…';
-        try{ await loadCoach(a, {title: a.title, abstract: a.abstract});
-             det.innerHTML = claimHistDetail(a); }
-        catch(e){ btn.disabled = false; btn.textContent = '生成'; }
-      };
-      list.appendChild(row); list.appendChild(det);
-    });
-  }
+    rows.forEach(addRow);
+  });
 
   if(all.length){
     const foot = document.createElement('div');
@@ -984,20 +965,6 @@ function renderHistory(){
     foot.textContent = `以上共 ${all.length} 条记录`;
     list.appendChild(foot);
   }
-}
-
-function claimHistDetail(a){
-  let h = `<div class="dmeta">${escapeHTML(a.journal || '')}${a.year ? ' · ' + escapeHTML(a.year) : ''}</div>`;
-  h += `<div><b>${escapeHTML(a.title || '')}</b></div>`;
-  h += `<div class="dclaim"><b>${a.claim_type ? '〔' + escapeHTML(a.claim_type) + '〕' : ''}</b> `
-    + escapeHTML(a.claim_sentence || '') + '</div>';
-  h += `<div style="font-size:13px;color:#6b7785;margin:6px 0">证据强度：${a.evidence || '未填'}/5</div>`;
-  if(a.abstract) h += `<div style="font-size:13px;line-height:1.65;color:#3b4550;margin:8px 0">${escapeHTML(a.abstract)}</div>`;
-  const f = S.coach[coachKey(a)];
-  h += '<div class="box">' + (f ? coachHTML(f)
-    : `<div class="bt">评价与建议</div><div class="ln" style="color:#6b7785">未生成</div>
-       <button class="cbtn small ghost" style="margin-top:6px">生成</button>`) + '</div>';
-  return h;
 }
 
 function histDetail(a){
@@ -1017,9 +984,27 @@ function histDetail(a){
 function escapeHTML(x){ return String(x||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 /* ========== 分析 ========== */
+let STAT_SRC = 'pubmed';
+
+function srcBar(){
+  return '<div style="display:flex;gap:8px;margin-bottom:14px">'
+    + ['pubmed','zotero'].map(s => `<button class="srcbtn" data-src="${s}"
+        style="flex:1;padding:8px;font-size:13px;border-radius:8px;border:1px solid #e3e8ee;
+        background:${s === STAT_SRC ? '#1f4e79' : '#fff'};color:${s === STAT_SRC ? '#fff' : '#1c2128'}">
+        ${s === 'pubmed' ? 'PubMed' : 'Zotero库'}</button>`).join('') + '</div>';
+}
+function bindSrcBar(){
+  $$('#anpanel .srcbtn').forEach(b => {
+    b.onclick = () => { STAT_SRC = b.dataset.src; renderStats(); };
+  });
+}
+
 function renderStats(){
-  const A = S.answers.filter(a => a.mode !== 'claim');
-  if(!A.length){ $('#anpanel').innerHTML = '<div style="color:#6b7785">还没有档位判断记录。</div>'; return; }
+  const A = S.answers.filter(a => (a.source || 'pubmed') === STAT_SRC);
+  if(!A.length){
+    $('#anpanel').innerHTML = srcBar() + `<div style="color:#6b7785">${STAT_SRC === 'zotero' ? 'Zotero库' : 'PubMed'} 还没有记录。</div>`;
+    bindSrcBar(); return;
+  }
   const m = {};
   TORDER.forEach(p => { m[p] = {}; TORDER.forEach(a2 => m[p][a2] = 0); });
   A.forEach(a => { if(m[a.pred_tier] && m[a.pred_tier][a.actual_tier] !== undefined) m[a.pred_tier][a.actual_tier]++; });
@@ -1077,7 +1062,8 @@ function renderStats(){
     h += `<div style="margin-top:14px;font-size:13px;color:#6b7785">满10篇后显示趋势。</div>`;
   }
   h += `<div style="margin-top:14px;font-size:12px;color:#6b7785">参考基线：5档随机猜完全命中20%、±1档内52%。</div>`;
-  $('#anpanel').innerHTML = h;
+  $('#anpanel').innerHTML = srcBar() + h;
+  bindSrcBar();
 }
 $('#anbtn').onclick = renderStats;
 
