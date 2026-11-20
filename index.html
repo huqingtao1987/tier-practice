@@ -518,6 +518,31 @@ function curKey(){
   return (b && it) ? b.id + '/' + it.id : '';
 }
 
+async function migrateBatches(){
+  const bank = await bankGet();
+  const map = {};
+  if(bank && bank.items) bank.items.forEach(x => { if(x.key) map[x.key] = x; });
+  let changed = false;
+  S.batches.forEach(b => {
+    if(b.mode === 'claim'){ b.mode = 'tier'; changed = true; }
+    (b.items || []).forEach(it => {
+      if(!it.journal_name && it.journal){ it.journal_name = it.journal; changed = true; }
+      if(!it.tier && it.key && map[it.key] && map[it.key].tier){
+        it.tier = +map[it.key].tier; it.ring = it.ring || 'zotero'; changed = true;
+      }
+    });
+  });
+  S.answers.forEach(a => {
+    if(!a.source){ a.source = a.key ? 'zotero' : 'pubmed'; changed = true; }
+    if(!a.actual_tier && a.key && map[a.key] && map[a.key].tier){
+      a.actual_tier = +map[a.key].tier;
+      a.journal = a.journal || map[a.key].journal;
+      changed = true;
+    }
+  });
+  if(changed) persist();
+}
+
 function renderPractice(){
   const b = curBatch();
   const sel = $('#batchsel');
@@ -554,6 +579,15 @@ function gotoIdx(i){
   $('#qcard').classList.remove('claimmode');
   $('#tierBlock').classList.remove('hidden');
   $('#basislab').textContent = '一句话：主张 + 依据（可选）';
+  if(!it.tier){
+    $('#reveal').classList.remove('hidden');
+    $('#qcard').classList.add('hidden');
+    $('#verdict').className = 'verdict';
+    $('#verdict').textContent = '该题无法判分';
+    $('#revj').textContent = '该批次由旧版生成，没有标准档位。请重新生成一批。';
+    return;
+  }
+
   const rec = answerOf(b, it);
   if(rec){ showReveal(rec, it); mountChat(rec, it); renderCoachSlot(rec, it); return; }
 
@@ -645,6 +679,14 @@ function submitAnswer(){
 function showReveal(rec, it){
   $('#qcard').classList.add('hidden');
   $('#reveal').classList.remove('hidden');
+  if(!okRec(rec)){
+    $('#verdict').className = 'verdict';
+    $('#verdict').textContent = '旧版记录，没有档位判断';
+    $('#revj').textContent = `实际：${it.journal_name || '—'}（${TNAME[it.tier] || it.tier || '—'}）`;
+    $('#coachbox').classList.add('hidden');
+    $('#coachbox').innerHTML = '';
+    return;
+  }
   const d = dl(rec);
   let cls = 'ok', txt = '完全命中';
   if(d > 0){ cls = 'under'; txt = `低估 ${d} 档`; }
@@ -918,14 +960,18 @@ function renderHistory(){
   const list = $('#hlist'); list.innerHTML = '';
 
   const addRow = a => {
-    const d = dl(a);
+    const good = okRec(a);
+    const d = good ? dl(a) : null;
     const row = document.createElement('div');
     row.className = 'hrow';
-    const col = d === 0 ? '#1a7f4b' : d > 0 ? '#2f6fa8' : '#b45309';
+    const col = !good ? '#6b7785' : d === 0 ? '#1a7f4b' : d > 0 ? '#2f6fa8' : '#b45309';
     row.innerHTML = `<span class="m">${a.date} · ${a.batch}/${a.id}</span>`
       + `<span style="flex:1"></span>`
-      + `<span>判${TNAME[a.pred_tier]||a.pred_tier} / 实${TNAME[a.actual_tier]||a.actual_tier}</span>`
-      + `<span style="color:${col};font-weight:600">${d === 0 ? '命中' : d > 0 ? '低估' : '高估'}</span>`;
+      + (good
+          ? `<span>判${TNAME[a.pred_tier]||a.pred_tier} / 实${TNAME[a.actual_tier]||a.actual_tier}</span>`
+            + `<span style="color:${col};font-weight:600">${d === 0 ? '命中' : d > 0 ? '低估' : '高估'}</span>`
+          : `<span>实${TNAME[a.actual_tier]||a.actual_tier||'—'}</span>`
+            + `<span style="color:${col}">旧版·不计分</span>`);
     const det = document.createElement('div');
     det.className = 'hdetail hidden';
     const paint = () => {
@@ -1086,7 +1132,9 @@ $('#bankfile').onchange = async e => {
     const d = JSON.parse(await f.text());
     if(!d || !Array.isArray(d.items)) throw new Error('不是 zotero_bank.json 格式');
     await bankPut(d);
+    await migrateBatches();
     renderSettings();
+    renderPractice();
     alert(`已导入 ${d.items.length} 篇`);
   }catch(err){ alert('导入失败：' + err.message); }
   e.target.value = '';
@@ -1142,11 +1190,14 @@ $('#importfile').onchange = async e => {
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('sw.js').catch(()=>{});
 }
-renderPractice();
-if(location.hash){
-  const t = location.hash.slice(1);
-  if(['practice','history','stats','settings'].includes(t)) showTab(t);
-}
+(async () => {
+  await migrateBatches();     // 旧版批次补 journal_name/tier
+  renderPractice();
+  if(location.hash){
+    const t = location.hash.slice(1);
+    if(['practice','history','stats','settings'].includes(t)) showTab(t);
+  }
+})();
 </script>
 </body>
 </html>
