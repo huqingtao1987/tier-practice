@@ -148,8 +148,9 @@ footer{text-align:center;font-size:12px;color:var(--mute);padding:18px 12px}
     <label class="lab" id="basislab">一句话：主张 + 依据（可选）</label>
     <textarea id="basis" rows="3" placeholder="例：X通过Z使Y发生变化；依据是……"></textarea>
 
-    <label class="lab" id="extraLab">补充问题</label>
-    <textarea id="extra" rows="2" placeholder=""></textarea>
+    <label class="lab" id="extraLab">补充问题 · 选一个回答（可选）</label>
+    <div id="qsel" class="chips"></div>
+    <textarea id="extra" rows="2" placeholder="选上面的一个问题再写，一句话即可"></textarea>
 
     <div class="btns"><button id="submit" disabled>提交并查看答案</button></div>
   </div>
@@ -297,14 +298,13 @@ const BIO_FILTER = '(' + [
 ].join(' OR ') + ')';
 
 const QKINDS = [
-  {id:'gap',      label:'这篇最该补的一件事是什么？补了之后能到哪一档'},
-  {id:'next',     label:'如果这是我的课题，下一步要回答的问题是什么'},
-  {id:'conflict', label:'这篇里最反常识的一句结论，和你已知的哪里冲突'}
+  {id:'gap',      label:'最该补的一件事',  hint:'这篇最该补的一件事是什么？补了之后能到哪一档'},
+  {id:'next',     label:'下一步问题',      hint:'如果这是我的课题，下一步要回答的问题是什么'},
+  {id:'conflict', label:'怀疑默认',        hint:'这篇让你怀疑默认的哪一点'},
+  {id:'alt',      label:'替代解释',        hint:'作者没有排除的替代解释是什么'},
+  {id:'impact',   label:'对我的课题',      hint:'这篇对我现有课题的影响是什么'}
 ];
-function nextQKind(){
-  const n = (S.answers || []).length % QKINDS.length;
-  return QKINDS[n];
-}
+function qkOf(id){ return QKINDS.find(x => x.id === id) || null; }
 
 const blank = () => ({v:1, batches:[], answers:[], judgments:{}, coach:{}, chat:{}, defaults:{}, last:'',
   settings:{key:'', base:'https://api.deepseek.com/v1', model:'deepseek-chat'}});
@@ -630,9 +630,8 @@ function gotoIdx(i){
   $('#qcard').classList.remove('claimmode');
   $('#tierBlock').classList.remove('hidden');
   $('#basislab').textContent = '一句话：主张 + 依据（可选）';
-  Q.qkind = nextQKind();
-  $('#extraLab').textContent = Q.qkind.label;
-  $('#extra').placeholder = '一句话即可，写不出来就跳过';
+  Q.qkind = null;
+  renderQSel();
   if(!it.tier){
     $('#reveal').classList.remove('hidden');
     $('#qcard').classList.add('hidden');
@@ -656,7 +655,8 @@ function gotoIdx(i){
   $('#basis').value = '';
   $('#defanswer').value = '';
   $('#extra').value = '';
-  renderTiers(); renderTypes(); renderKnobs(); refreshSubmit();
+  $('#extra').placeholder = '选上面的一个问题再写，一句话即可';
+  renderTiers(); renderTypes(); renderQSel(); renderKnobs(); refreshSubmit();
 }
 
 function renderTiers(){
@@ -679,6 +679,25 @@ function renderTypes(){
     box.appendChild(btn);
   });
 }
+function renderQSel(){
+  const box = $('#qsel'); if(!box) return;
+  box.innerHTML = '';
+  QKINDS.forEach(q => {
+    const btn = document.createElement('button');
+    btn.textContent = q.label;
+    btn.title = q.hint;
+    if(Q.qkind === q.id) btn.classList.add('on');
+    btn.onclick = () => {
+      Q.qkind = (Q.qkind === q.id) ? null : q.id;
+      renderQSel();
+      $('#extra').placeholder = Q.qkind
+        ? qkOf(Q.qkind).hint
+        : '选上面的一个问题再写，一句话即可';
+    };
+    box.appendChild(btn);
+  });
+}
+
 function renderKnobs(){
   const box = $('#knobs'); box.innerHTML = '';
   [['n','创新性'],['i','重要性'],['e','证据强度']].forEach(([k, name]) => {
@@ -719,8 +738,8 @@ function submitAnswer(){
     basis: basis,
     claim_type: Q.type, claim_sentence: '',
     default_answer: $('#defanswer').value.trim(),
-    q_kind: Q.qkind ? Q.qkind.id : '',
-    q_label: Q.qkind ? Q.qkind.label : '',
+    q_kind: Q.qkind || '',
+    q_label: Q.qkind ? qkOf(Q.qkind).hint : '',
     extra_answer: $('#extra').value.trim(),
     collections: it.collections || []
   };
@@ -1196,6 +1215,8 @@ function histDetail(a){
   h += `<div><b>${escapeHTML(a.title||'')}</b></div>`;
   h += `<div style="font-size:13px;color:#6b7785;margin:6px 0">你的三轴：创新性${a.novelty||'-'} · 重要性${a.importance||'-'} · 证据强度${a.evidence||'-'}</div>`;
   if(a.basis) h += `<div style="font-size:13px;margin:4px 0"><b>依据：</b>${escapeHTML(a.basis)}</div>`;
+  if(a.default_answer) h += `<div style="font-size:13px;margin:4px 0"><b>默认答案：</b>${escapeHTML(a.default_answer)}</div>`;
+  if(a.extra_answer) h += `<div style="font-size:13px;margin:4px 0"><b>${escapeHTML(a.q_label || '补充问题')}：</b>${escapeHTML(a.extra_answer)}</div>`;
   if(a.claim_sentence || a.claim_type){
     h += `<div class="dclaim"><b>${a.claim_type ? '〔'+a.claim_type+'〕' : ''}</b> ${escapeHTML(a.claim_sentence||'')}</div>`;
   }
