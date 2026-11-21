@@ -131,8 +131,8 @@ footer{text-align:center;font-size:12px;color:var(--mute);padding:18px 12px}
     <h2 id="qtitle"></h2>
     <div class="abs" id="qabs"></div>
 
-    <label class="lab" id="deflab">这个领域的默认答案是什么（一句话）</label>
-    <textarea id="defanswer" rows="2" placeholder="例：该领域默认eQTL效应在静息态可检出、跨组织高度共享"></textarea>
+    <div class="lab">主张类型（可选）</div>
+    <div id="typesel" class="chips"></div>
 
     <div id="tierBlock">
       <div class="lab">你判断的档位（必填）</div>
@@ -142,15 +142,19 @@ footer{text-align:center;font-size:12px;color:var(--mute);padding:18px 12px}
     <div class="lab">三轴（可选）</div>
     <div id="knobs"></div>
 
-    <div class="lab">主张类型（可选）</div>
-    <div id="typesel" class="chips"></div>
+    <details id="morepanel" style="margin-top:16px">
+      <summary style="cursor:pointer;font-size:14px;color:var(--blue)">补充记录（默认答案 / 主张 / 补充问题）</summary>
 
-    <label class="lab" id="basislab">一句话：主张 + 依据（可选）</label>
-    <textarea id="basis" rows="3" placeholder="例：X通过Z使Y发生变化；依据是……"></textarea>
+      <label class="lab" id="deflab">这个领域的默认答案是什么（一句话）</label>
+      <textarea id="defanswer" rows="2" placeholder="例：该领域默认eQTL效应在静息态可检出、跨组织高度共享"></textarea>
 
-    <label class="lab" id="extraLab">补充问题 · 选一个回答（可选）</label>
-    <div id="qsel" class="chips"></div>
-    <textarea id="extra" rows="2" placeholder="选上面的一个问题再写，一句话即可"></textarea>
+      <label class="lab" id="basislab">一句话：主张 + 依据（可选）</label>
+      <textarea id="basis" rows="2" placeholder="例：X通过Z使Y发生变化；依据是……"></textarea>
+
+      <label class="lab" id="extraLab">补充问题 · 选一个回答（可选）</label>
+      <div id="qsel" class="chips"></div>
+      <textarea id="extra" rows="2" placeholder="选上面的一个问题再写，一句话即可"></textarea>
+    </details>
 
     <div class="btns"><button id="submit" disabled>提交并查看答案</button></div>
   </div>
