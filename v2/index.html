@@ -1,0 +1,1380 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>文章档位判断 v2 · 领域模型</title>
+<meta name="theme-color" content="#1f4e79">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="档位判断">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{
+  --ink:#1c2128; --mute:#6b7785; --line:#e3e8ee; --bg:#f6f8fa;
+  --blue:#1f4e79; --blue2:#2f6fa8; --ok:#1a7f4b; --warn:#b45309; --bad:#a11b1b;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{font:15px/1.65 -apple-system,"PingFang SC","Helvetica Neue",Arial,sans-serif;color:var(--ink);background:var(--bg);
+  padding-bottom:calc(28px + env(safe-area-inset-bottom))}
+header{position:sticky;top:0;z-index:9;background:#fff;border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top)}
+header h1{margin:0;padding:10px 16px 6px;font-size:16px;font-weight:600;color:var(--blue)}
+nav{display:flex;gap:2px;padding:0 8px}
+nav button{flex:1;border:0;background:none;padding:10px 4px;font-size:14px;color:var(--mute);border-bottom:2px solid transparent;font-family:inherit}
+nav button.on{color:var(--blue);border-bottom-color:var(--blue);font-weight:600}
+main{padding:12px 14px}
+.tab{display:none}.tab.on{display:block}
+.card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+.hidden{display:none!important}
+.lab{display:block;margin:14px 0 6px;font-size:13px;color:var(--mute)}
+textarea,input,select{width:100%;font:inherit;color:inherit;background:#fff;border:1px solid var(--line);border-radius:8px;padding:9px 10px}
+textarea{resize:vertical;line-height:1.55}
+button{font-family:inherit;font-size:15px;border-radius:9px;border:1px solid var(--blue);background:var(--blue);color:#fff;padding:11px 16px;cursor:pointer}
+button:disabled{opacity:.45}
+button.ghost{background:#fff;color:var(--blue)}
+button.small{padding:7px 11px;font-size:13px}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.row>label{flex:1 1 90px;font-size:13px;color:var(--mute)}
+.row input{margin-top:4px}
+.note{font-size:12px;color:var(--mute);margin-top:8px;min-height:16px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chips button{background:#fff;color:var(--ink);border:1px solid var(--line);padding:9px 13px;font-size:14px}
+.chips button.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+.knob{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.knob span{width:74px;font-size:13px;color:var(--mute)}
+.knob .dots{display:flex;gap:6px}
+.knob .dots button{width:34px;height:34px;padding:0;font-size:13px;background:#fff;color:var(--mute);border:1px solid var(--line)}
+.knob .dots button.on{background:var(--blue2);color:#fff;border-color:var(--blue2)}
+h2{font-size:17px;line-height:1.45;margin:6px 0 10px}
+.abs{font-size:14px;line-height:1.7;color:#2b3440;white-space:pre-wrap}
+.qmeta{font-size:12px;color:var(--mute)}
+.btns{display:flex;gap:10px;margin-top:16px}
+.btns button{flex:1}
+.verdict{font-size:15px;font-weight:600;padding:10px 12px;border-radius:9px;margin-bottom:10px}
+.verdict.ok{background:#e9f6ee;color:var(--ok)}
+.verdict.under{background:#eaf2fb;color:var(--blue2)}
+.verdict.over{background:#fdf1e7;color:var(--warn)}
+.revj{font-size:14px;color:var(--mute);margin-bottom:12px}
+.box{background:#f8fafc;border:1px solid var(--line);border-radius:9px;padding:11px;margin-top:10px}
+.box .bt{font-size:12px;color:var(--blue);font-weight:600;margin-bottom:6px;letter-spacing:.4px}
+.box .ln{margin:4px 0;font-size:14px}
+.axisline{display:flex;gap:6px;font-size:13px;margin:3px 0;align-items:baseline}
+.badge{font-size:11px;padding:1px 6px;border-radius:20px;border:1px solid var(--line);color:var(--mute)}
+.badge.hi{color:var(--warn);border-color:#f0d3b4;background:#fdf4ea}
+.badge.lo{color:var(--blue2);border-color:#cfe0f2;background:#eef5fc}
+.badge.eq{color:var(--ok);border-color:#cbe7d6;background:#eef9f2}
+.hrow{display:flex;gap:8px;align-items:center;padding:11px 4px;border-bottom:1px solid var(--line);cursor:pointer;font-size:14px}
+.hrow .m{color:var(--mute);font-size:12px}
+.hdetail{padding:10px 4px 16px;border-bottom:1px solid var(--line);font-size:14px}
+.dmeta{font-size:12px;color:var(--mute);margin-bottom:6px}
+.dclaim{background:#f8fafc;border:1px dashed var(--line);border-radius:8px;padding:8px 10px;margin:8px 0;font-size:13px}
+table.mtx{border-collapse:collapse;font-size:13px;width:100%}
+table.mtx th,table.mtx td{border:1px solid #dfe5ec;text-align:center;padding:7px 4px}
+table.mtx th{background:#f2f6fa;font-weight:500;color:var(--mute)}
+.diag{outline:2px solid var(--blue2);outline-offset:-2px}
+.trend{display:flex;align-items:flex-end;gap:10px;height:90px;margin-top:10px}
+.trend div{flex:1;background:#cfe0f2;border-radius:4px 4px 0 0;position:relative;min-height:2px}
+.trend span{position:absolute;top:-17px;left:0;right:0;text-align:center;font-size:11px;color:var(--mute)}
+.warnbox{background:#fff8ec;border:1px solid #f2d9b0;border-radius:9px;padding:10px;font-size:13px;color:#7a5212;margin-bottom:12px}
+footer{text-align:center;font-size:12px;color:var(--mute);padding:18px 12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>文章档位判断 v2 · 领域模型</h1>
+  <nav id="tabs">
+    <button data-tab="practice" class="on">练习</button>
+    <button data-tab="history">历史</button>
+    <button data-tab="stats">分析</button>
+    <button data-tab="settings">设置</button>
+  </nav>
+</header>
+
+<main>
+<!-- 练习 -->
+<section id="practice" class="tab on">
+  <div class="card">
+    <details id="genpanel">
+      <summary style="cursor:pointer;font-size:14px;color:var(--blue)">生成新一批</summary>
+      <div class="row" style="margin-top:10px">
+        <label>来源
+          <select id="source">
+            <option value="pubmed">PubMed · 练档位</option>
+            <option value="zotero">Zotero库 · 练主张</option>
+          </select>
+        </label>
+        <label>篇数<input id="n" type="number" inputmode="numeric" value="10" min="1" max="30"></label>
+        <label id="daysLab">回溯天数<input id="days" type="number" inputmode="numeric" value="1825" min="30"></label>
+        <label>随机种子<input id="seed" type="number" inputmode="numeric" value="0"></label>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <label style="flex:1 1 100%">文件夹（仅 Zotero 有效）
+          <select id="folder"><option value="">全部</option></select>
+        </label>
+      </div>
+      <div class="btns"><button id="gen">生成</button></div>
+      <div id="genlog" class="note"></div>
+    </details>
+    <div style="margin-top:12px">
+      <label class="lab" style="margin-top:0">当前批次</label>
+      <select id="batchsel"></select>
+    </div>
+  </div>
+
+  <div id="empty" class="card hidden">
+    <div style="color:var(--mute);font-size:14px">还没有题目。点上面的「生成新一批」。</div>
+  </div>
+
+  <div id="qcard" class="card hidden">
+    <div class="qmeta" id="qidx"></div>
+    <h2 id="qtitle"></h2>
+    <div class="abs" id="qabs"></div>
+
+    <label class="lab" id="deflab">这个领域的默认答案是什么（一句话）</label>
+    <textarea id="defanswer" rows="2" placeholder="例：该领域默认eQTL效应在静息态可检出、跨组织高度共享"></textarea>
+
+    <div id="tierBlock">
+      <div class="lab">你判断的档位（必填）</div>
+      <div id="tiers" class="chips"></div>
+    </div>
+
+    <div class="lab">三轴（可选）</div>
+    <div id="knobs"></div>
+
+    <div class="lab">主张类型（可选）</div>
+    <div id="typesel" class="chips"></div>
+
+    <label class="lab" id="basislab">一句话：主张 + 依据（可选）</label>
+    <textarea id="basis" rows="3" placeholder="例：X通过Z使Y发生变化；依据是……"></textarea>
+
+    <label class="lab" id="extraLab">补充问题</label>
+    <textarea id="extra" rows="2" placeholder=""></textarea>
+
+    <div class="btns"><button id="submit" disabled>提交并查看答案</button></div>
+  </div>
+
+  <div id="reveal" class="card hidden">
+    <div id="verdict" class="verdict"></div>
+    <div id="revj" class="revj"></div>
+    <div id="coachbox" class="box hidden"></div>
+  </div>
+
+  <div class="btns hidden" id="navrow">
+    <button id="prev" class="ghost">上一篇</button>
+    <button id="next" class="ghost">下一篇</button>
+  </div>
+</section>
+
+<!-- 历史 -->
+<section id="history" class="tab">
+  <div id="hsum" class="card" style="font-size:14px"></div>
+  <div class="card" style="padding:10px 12px">
+    <label class="lab" style="margin:0">按文件夹筛选
+      <select id="histfolder"><option value="">全部</option></select>
+    </label>
+  </div>
+  <div class="card" style="padding:4px 12px">
+    <div id="hlist"></div>
+  </div>
+</section>
+
+<!-- 分析 -->
+<section id="stats" class="tab">
+  <div class="card">
+    <button id="anbtn">分析我的判断</button>
+    <div id="anpanel" style="margin-top:14px"></div>
+  </div>
+</section>
+
+<!-- 设置 -->
+<section id="settings" class="tab">
+  <div class="card">
+    <div class="lab" style="margin-top:0">AI 密钥（只存在本机浏览器）</div>
+    <input id="apikey" type="password" autocomplete="off" placeholder="sk-...">
+    <div class="warnbox" style="margin-top:10px">密钥保存在本机浏览器的localStorage里。任何能解锁这台手机的人、或装了的浏览器扩展都能读到。建议单独申请一个限额key，不要用主账号的。</div>
+    <label class="lab">API 地址</label>
+    <input id="aibase" type="text" placeholder="https://api.deepseek.com/v1">
+    <label class="lab">模型</label>
+    <input id="aimodel" type="text" placeholder="deepseek-chat">
+    <div class="btns"><button id="savecfg">保存</button></div>
+    <div id="cfglog" class="note"></div>
+  </div>
+
+  <div class="card">
+    <div class="lab" style="margin-top:0">Zotero题库（主张练习）</div>
+    <div id="bankstat" class="note" style="margin-top:0"></div>
+    <div class="btns" style="margin-top:10px">
+      <button id="bankimport" class="ghost small">导入 zotero_bank.json</button>
+      <button id="bankclear" class="ghost small">清空</button>
+    </div>
+    <input id="bankfile" type="file" accept="application/json,.json" class="hidden">
+    <div class="note">题库由电脑上的 <code>build_zotero_bank.py</code> 生成，只读你的 Zotero 库，不上传任何地方。手机端无法直接读 Zotero。</div>
+  </div>
+
+  <div class="card">
+    <div class="lab" style="margin-top:0">数据</div>
+    <div class="btns" style="margin-top:0"><button id="exportbtn" class="ghost small">导出JSON</button><button id="importbtn" class="ghost small">导入JSON</button></div>
+    <input id="importfile" type="file" accept="application/json,.json" class="hidden">
+    <div id="datalog" class="note"></div>
+  </div>
+
+  <div class="card" style="font-size:13px;color:var(--mute)">
+    档位口径（按钮从左到右）：1-5分 · 5-10分 · 10分 · 大子刊 · CNS。内部1最好、5最差。<br>
+    三轴：创新性＝与领域默认答案的距离；重要性＝受众面；证据强度＝因果链闭合度。按最弱项定档。
+  </div>
+</section>
+</main>
+
+<footer>本机运行 · 数据只存在这台设备</footer>
+
+<script>
+/* ========== 基础 ========== */
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const KEY = 'tp.v1';
+const TYPES = ['描述','关联','因果','机制','规则·原则','资源·方法'];
+// 内部编号 1 最好、5 最差；显示顺序按用户要求从左到右 = 由低到高
+const TNAME = {1:'CNS', 2:'大子刊', 3:'10分', 4:'5-10分', 5:'1-5分'};
+const TORDER = [5,4,3,2,1];
+const dl = a => Number(a.pred_tier) - Number(a.actual_tier);
+const okRec = a => { const p = Number(a.pred_tier), c = Number(a.actual_tier);
+  return Number.isFinite(p) && Number.isFinite(c) && p >= 1 && p <= 5 && c >= 1 && c <= 5; };
+const BAD_TYPES = new Set(['Review','Comment','Editorial','News','Letter','Case Reports',
+  'Published Erratum','Preprint','Retraction of Publication','Retracted Publication']);
+const MIN_ABSTRACT = 600;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ========== Zotero题库（IndexedDB，避免 localStorage 5MB 上限） ========== */
+const IDB_NAME = 'tp.bank', IDB_STORE = 'bank';
+function idb(){
+  return new Promise((res, rej) => {
+    if(!('indexedDB' in window)) return rej(new Error('浏览器不支持 IndexedDB'));
+    const r = indexedDB.open(IDB_NAME, 1);
+    r.onupgradeneeded = () => { if(!r.result.objectStoreNames.contains(IDB_STORE)) r.result.createObjectStore(IDB_STORE); };
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+async function bankGet(){
+  try{
+    const db = await idb();
+    return await new Promise((res, rej) => {
+      const t = db.transaction(IDB_STORE, 'readonly');
+      const q = t.objectStore(IDB_STORE).get('items');
+      q.onsuccess = () => res(q.result || null);
+      q.onerror = () => rej(q.error);
+    });
+  }catch(e){ return null; }
+}
+async function bankPut(bank){
+  const db = await idb();
+  return new Promise((res, rej) => {
+    const t = db.transaction(IDB_STORE, 'readwrite');
+    t.objectStore(IDB_STORE).put(bank, 'items');
+    t.oncomplete = () => res(true);
+    t.onerror = () => rej(t.error);
+  });
+}
+async function bankClear(){
+  const db = await idb();
+  return new Promise((res, rej) => {
+    const t = db.transaction(IDB_STORE, 'readwrite');
+    t.objectStore(IDB_STORE).delete('items');
+    t.oncomplete = () => res(true);
+    t.onerror = () => rej(t.error);
+  });
+}
+
+// 只对综合刊（Nature/Science/Cell/PNAS/Nat Commun）加生命科学限定；
+// 其余刊本身就是生物医学刊，不需要再加条件，避免漏检。
+const BIO_FILTER = '(' + [
+  '"Immunology"[Mesh]','"Microbiology"[Mesh]','"Virology"[Mesh]',
+  '"Genetics"[Mesh]','"Cell Biology"[Mesh]','"Molecular Biology"[Mesh]',
+  'immunolog*[tiab]','virolog*[tiab]','microb*[tiab]','bacteri*[tiab]','infect*[tiab]',
+  'inflammasom*[tiab]','inflammat*[tiab]','cytokin*[tiab]','transcriptom*[tiab]',
+  'mice[tiab]','mouse[tiab]','"in vivo"[tiab]'
+].join(' OR ') + ')';
+
+const QKINDS = [
+  {id:'gap',      label:'这篇最该补的一件事是什么？补了之后能到哪一档'},
+  {id:'next',     label:'如果这是我的课题，下一步要回答的问题是什么'},
+  {id:'conflict', label:'这篇里最反常识的一句结论，和你已知的哪里冲突'}
+];
+function nextQKind(){
+  const n = (S.answers || []).length % QKINDS.length;
+  return QKINDS[n];
+}
+
+const blank = () => ({v:1, batches:[], answers:[], judgments:{}, coach:{}, chat:{}, defaults:{}, last:'',
+  settings:{key:'', base:'https://api.deepseek.com/v1', model:'deepseek-chat'}});
+
+function load(){
+  try{
+    const d = JSON.parse(localStorage.getItem(KEY));
+    return (d && d.v) ? Object.assign(blank(), d) : blank();
+  }catch(e){ return blank(); }
+}
+let S = load();
+function persist(){
+  try{ localStorage.setItem(KEY, JSON.stringify(S)); }
+  catch(e){ alert('本地存储写入失败，可能已满。请在设置里导出后清理。'); }
+}
+function esc(s){ return String(s == null ? '' : s); }
+
+/* ========== 标签页 ========== */
+$$('#tabs button').forEach(b => b.onclick = () => showTab(b.dataset.tab));
+function showTab(t){
+  $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  $$('main .tab').forEach(s => s.classList.toggle('on', s.id === t));
+  if(t === 'history') renderHistory();
+  if(t === 'stats') renderStats();
+  if(t === 'settings') renderSettings();
+}
+
+/* ========== 生成 ========== */
+const mulberry32 = a => () => {
+  a |= 0; a = a + 0x6D2B79F5 | 0;
+  let t = Math.imul(a ^ a >>> 15, 1 | a);
+  t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+  return ((t ^ t >>> 14) >>> 0) / 4294967296;
+};
+function shuffle(a, rng){
+  for(let i = a.length - 1; i > 0; i--){
+    const j = Math.floor(rng() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+const ymd = d => d.toISOString().slice(0,10).replace(/-/g,'/');
+
+async function esearch(ta, mindate, maxdate, retmax=10, extra=''){
+  const term = `"${ta}"[ta]` + (extra ? ' AND ' + extra : '');
+  const url = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json'
+    + '&retmax=' + retmax + '&sort=date&datetype=pdat'
+    + '&mindate=' + encodeURIComponent(mindate) + '&maxdate=' + encodeURIComponent(maxdate)
+    + '&term=' + encodeURIComponent(term);
+  const r = await fetch(url);
+  const d = await r.json();
+  return (d.esearchresult && d.esearchresult.idlist) || [];
+}
+
+async function efetch(ids){
+  if(!ids.length) return [];
+  const url = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&id=' + ids.join(',');
+  const r = await fetch(url);
+  const xml = new DOMParser().parseFromString(await r.text(), 'text/xml');
+  const out = [];
+  xml.querySelectorAll('PubmedArticle').forEach(art => {
+    const pmid = (art.querySelector('PMID') || {}).textContent || '';
+    const title = ((art.querySelector('ArticleTitle') || {}).textContent || '').replace(/\s+/g,' ').trim();
+    const abs = [...art.querySelectorAll('AbstractText')].map(e => e.textContent).join(' ').replace(/\s+/g,' ').trim();
+    const jEl = art.querySelector('Journal > ISOAbbreviation') || art.querySelector('Journal > Title');
+    const iso = jEl ? jEl.textContent.trim() : '';
+    const types = [...art.querySelectorAll('PublicationType')].map(e => e.textContent.trim());
+    out.push({pmid, title, abstract: abs, iso, types});
+  });
+  return out;
+}
+
+// 按档位分层抽样：五个档位尽量等量，避免练习题全落在高分区。
+function pickByTier(cands, n, rng){
+  const TIERS = [1,2,3,4,5];
+  const byT = {}; TIERS.forEach(t => byT[t] = []);
+  cands.forEach(c => { if(byT[c.tier]) byT[c.tier].push(c); });
+
+  const base = Math.floor(n / 5);
+  const quota = {}; TIERS.forEach(t => quota[t] = base);
+  shuffle(TIERS.slice(), rng).slice(0, n - base * 5).forEach(t => quota[t]++);
+
+  // 每档内部：单刊最多2篇，保证同一档里刊物不重复太厉害
+  const pools = {};
+  TIERS.forEach(t => {
+    const perJ = {}, out = [];
+    shuffle(byT[t].slice(), rng).forEach(c => {
+      if((perJ[c.iso] || 0) < 2){ out.push(c); perJ[c.iso] = (perJ[c.iso] || 0) + 1; }
+    });
+    pools[t] = out;
+  });
+
+  const picked = [];
+  TIERS.forEach(t => picked.push(...pools[t].slice(0, quota[t])));
+  // 某档候选不够时，用其他档的余量补齐
+  const rest = [];
+  TIERS.forEach(t => rest.push(...pools[t].slice(quota[t])));
+  const short = n - picked.length;
+  if(short > 0) picked.push(...shuffle(rest, rng).slice(0, short));
+  return shuffle(picked, rng);
+}
+
+async function populateFolders(){
+  const bank = await bankGet();
+  const items = (bank && bank.items) || [];
+  const cnt = {};
+  items.forEach(x => (x.collections || []).forEach(c => { cnt[c] = (cnt[c] || 0) + 1; }));
+  const sel = $('#folder');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">全部</option>' + Object.entries(cnt)
+    .sort((a,b) => b[1] - a[1]).filter(([,v]) => v >= 5)
+    .map(([c,v]) => `<option value="${escapeHTML(c)}">${escapeHTML(c)}（${v}）</option>`).join('');
+  sel.value = cur;
+}
+
+async function generateFromBank(n){
+  const log = m => { $('#genlog').textContent = m; };
+  const bank = await bankGet();
+  let items = (bank && bank.items || []).filter(x => x.title && x.abstract && x.tier);
+  const folder = $('#folder').value;
+  if(folder){
+    const sub = items.filter(x => (x.collections || []).includes(folder));
+    if(sub.length >= n) items = sub;
+    else if(sub.length) { items = sub; log(`该文件夹只有 ${sub.length} 篇，按实际数量出题`); }
+    else { log(`文件夹「${folder}」里没有可用条目`); return; }
+  }
+  if(!items.length){
+    log('还没有可用题库。请到「设置」页导入 zotero_bank.json（需含档位）。');
+    return;
+  }
+  const used = new Set();
+  S.answers.forEach(a => a.key && used.add(a.key));
+  S.batches.forEach(b => (b.items || []).forEach(i => i.key && used.add(i.key)));
+
+  const seed = +$('#seed').value || 0;
+  const rng = seed ? mulberry32(seed) : Math.random;
+
+  // 按档位分层，和 PubMed 一致
+  const byT = {};
+  items.forEach(x => { const t = +x.tier; if(t >= 1 && t <= 5) (byT[t] = byT[t] || []).push(x); });
+  Object.values(byT).forEach(a => shuffle(a, rng));
+  const base = Math.floor(n / 5);
+  const quota = {}; [1,2,3,4,5].forEach(t => quota[t] = base);
+  shuffle([1,2,3,4,5], rng).slice(0, n - base * 5).forEach(t => quota[t]++);
+
+  const picked = [], spare = [];
+  [1,2,3,4,5].forEach(t => {
+    const pool = byT[t] || [];
+    const fresh = pool.filter(x => !used.has(x.key));
+    const take = (fresh.length ? fresh : pool).slice(0, quota[t]);
+    picked.push(...take);
+    spare.push(...pool.filter(x => !take.includes(x)));
+  });
+  const short = n - picked.length;
+  if(short > 0){ shuffle(spare, rng); picked.push(...spare.slice(0, short)); }
+  shuffle(picked, rng);
+  if(!picked.length){ log('题库里没有带档位的条目。'); return; }
+
+  const now = new Date();
+  const id = now.toISOString().replace(/[-:T]/g,'').slice(0,8) + '_'
+    + now.toTimeString().slice(0,8).replace(/:/g,'') + '_zt';
+  const batch = {id, created: now.toISOString().slice(0,10), mode: 'tier', source: 'zotero',
+    items: picked.map((p, i) => ({
+      id: 'P' + String(i + 1).padStart(2,'0'), key: p.key || '',
+      title: p.title, abstract: p.abstract, journal_name: p.journal || '',
+      ring: 'zotero', tier: +p.tier, year: p.year || '',
+      collections: p.collections || []
+    }))};
+  S.batches.unshift(batch); S.last = id; persist();
+  log(`已生成 ${picked.length} 篇（题库 ${items.length} 篇，已用 ${used.size} 篇）`);
+  $('#genpanel').open = false;
+  renderPractice();
+}
+
+async function generate(){
+  const n = Math.max(1, Math.min(30, +$('#n').value || 10));
+  const days = Math.max(30, +$('#days').value || 1825);
+  const seed = +$('#seed').value || 0;
+  if($('#source').value === 'zotero') return generateFromBank(n);
+  const rng = seed ? mulberry32(seed) : Math.random;
+  const log = m => { $('#genlog').textContent = m; };
+
+  const cfg = await (await fetch('journals.json')).json();
+  const used = new Set();
+  S.answers.forEach(a => a.pmid && used.add(a.pmid));
+  S.batches.forEach(b => (b.items || []).forEach(i => i.pmid && used.add(i.pmid)));
+
+  const end = new Date(), start = new Date(Date.now() - days * 864e5);
+  const pool = [];
+  let k = 0;
+  for(const j of cfg.journals){
+    k++;
+    log(`正在检索 ${k}/${cfg.journals.length}`);
+    try{
+      const extra = j.broad ? BIO_FILTER : '';
+      let ids = await esearch(j.ta, ymd(start), ymd(end), 15, extra);
+      ids = ids.filter(id => !used.has(id));
+      if(ids.length) pool.push(...ids.slice(0, j.tier >= 4 ? 10 : 6));
+    }catch(e){ /* 单刊失败不影响整体 */ }
+    await sleep(340);
+  }
+  if(!pool.length){ log('没有取到新论文。试试加大回溯天数，或等一段时间。'); return; }
+
+  const recs = [];
+  for(let i = 0; i < pool.length; i += 100){
+    log(`正在取文 ${Math.min(i + 100, pool.length)}/${pool.length}`);
+    try{ recs.push(...await efetch(pool.slice(i, i + 100))); }catch(e){}
+    await sleep(400);
+  }
+
+  const byIso = {};
+  cfg.journals.forEach(j => byIso[j.ta.toLowerCase()] = j);
+  const cands = [];
+  for(const r of recs){
+    if(!r.pmid || !r.title || !r.abstract) continue;
+    if(r.abstract.length < MIN_ABSTRACT) continue;
+    if(r.types.some(t => BAD_TYPES.has(t))) continue;
+    const j = byIso[(r.iso || '').toLowerCase()];
+    if(!j) continue;
+    cands.push({pmid:r.pmid, title:r.title, abstract:r.abstract, iso:j.ta,
+      journal_name:j.name, tier:j.tier, ring:j.ring});
+  }
+  if(!cands.length){ log('取到的论文都被过滤掉了（综述、短摘要等）。加大回溯天数再试。'); return; }
+
+  const picked = pickByTier(cands, n, rng);
+  const now = new Date();
+  const id = now.toISOString().replace(/[-:T]/g,'').slice(0,8) + '_'
+    + now.toTimeString().slice(0,8).replace(/:/g,'');
+  const batch = {id, created: now.toISOString().slice(0,10), mode: 'tier', source: 'pubmed',
+    items: picked.map((p, i) => ({
+      id: 'P' + String(i + 1).padStart(2,'0'), pmid: p.pmid, title: p.title,
+      abstract: p.abstract, journal_name: p.journal_name, ring: p.ring, tier: p.tier
+    }))};
+  S.batches.unshift(batch);
+  S.last = id;
+  persist();
+  const cnt = {}; picked.forEach(p => cnt[p.tier] = (cnt[p.tier] || 0) + 1);
+  const dist = TORDER.filter(t => cnt[t]).map(t => `${TNAME[t]} ${cnt[t]}`).join(' · ');
+  log(`已生成 ${picked.length} 篇（候选 ${cands.length} 篇）：${dist}`);
+  $('#genpanel').open = false;
+  renderPractice();
+}
+
+/* ========== 练习 ========== */
+let Q = {idx:0, tier:null, type:'', knobs:{n:0,i:0,e:0}};
+
+function curBatch(){
+  return S.batches.find(b => b.id === S.last) || S.batches[0] || null;
+}
+function answered(b, it){
+  return S.answers.some(a => a.batch === b.id && a.id === it.id);
+}
+function answerOf(b, it){
+  return S.answers.find(a => a.batch === b.id && a.id === it.id) || null;
+}
+function curKey(){
+  const b = curBatch(); const it = b && b.items[Q.idx];
+  return (b && it) ? b.id + '/' + it.id : '';
+}
+
+async function migrateBatches(){
+  const bank = await bankGet();
+  const map = {};
+  if(bank && bank.items) bank.items.forEach(x => { if(x.key) map[x.key] = x; });
+  let changed = false;
+  S.batches.forEach(b => {
+    if(b.mode === 'claim'){ b.mode = 'tier'; changed = true; }
+    (b.items || []).forEach(it => {
+      if(!it.journal_name && it.journal){ it.journal_name = it.journal; changed = true; }
+      if(!it.tier && it.key && map[it.key] && map[it.key].tier){
+        it.tier = +map[it.key].tier; it.ring = it.ring || 'zotero'; changed = true;
+      }
+      if(!it.collections && it.key && map[it.key] && map[it.key].collections){
+        it.collections = map[it.key].collections; changed = true;
+      }
+    });
+  });
+  S.answers.forEach(a => {
+    if(!a.source){ a.source = a.key ? 'zotero' : 'pubmed'; changed = true; }
+    if(!a.actual_tier && a.key && map[a.key] && map[a.key].tier){
+      a.actual_tier = +map[a.key].tier;
+      a.journal = a.journal || map[a.key].journal;
+      changed = true;
+    }
+  });
+  if(changed) persist();
+}
+
+function renderPractice(){
+  const b = curBatch();
+  const sel = $('#batchsel');
+  sel.innerHTML = '';
+  S.batches.forEach(x => {
+    const o = document.createElement('option');
+    o.value = x.id;
+    o.textContent = `${x.created} · ${x.source === 'zotero' ? 'Zotero' : 'PubMed'} · ${x.items.length}篇 · 已答 ${S.answers.filter(a => a.batch === x.id).length}`;
+    if(b && x.id === b.id) o.selected = true;
+    sel.appendChild(o);
+  });
+  if(!S.batches.length){
+    $('#empty').classList.remove('hidden');
+    $('#qcard').classList.add('hidden');
+    $('#reveal').classList.add('hidden');
+    $('#navrow').classList.add('hidden');
+    return;
+  }
+  $('#empty').classList.add('hidden');
+  let idx = b.items.findIndex(it => !answered(b, it));
+  if(idx < 0) idx = b.items.length - 1;
+  gotoIdx(idx);
+}
+
+function gotoIdx(i){
+  const b = curBatch(); if(!b || !b.items.length) return;
+  const idx = Math.max(0, Math.min(b.items.length - 1, i));
+  Q = {idx, tier:null, type:'', knobs:{n:0,i:0,e:0}};
+  $('#navrow').classList.remove('hidden');
+  $('#prev').disabled = idx === 0;
+  $('#next').disabled = idx === b.items.length - 1;
+
+  const it = b.items[idx];
+  const oldDef = $('#defbox'); if(oldDef) oldDef.remove();
+  $('#qcard').classList.remove('claimmode');
+  $('#tierBlock').classList.remove('hidden');
+  $('#basislab').textContent = '一句话：主张 + 依据（可选）';
+  Q.qkind = nextQKind();
+  $('#extraLab').textContent = Q.qkind.label;
+  $('#extra').placeholder = '一句话即可，写不出来就跳过';
+  if(!it.tier){
+    $('#reveal').classList.remove('hidden');
+    $('#qcard').classList.add('hidden');
+    $('#verdict').className = 'verdict';
+    $('#verdict').textContent = '该题无法判分';
+    $('#revj').textContent = '该批次由旧版生成，没有标准档位。请重新生成一批。';
+    return;
+  }
+
+  const rec = answerOf(b, it);
+  if(rec){ showReveal(rec, it); mountChat(rec, it);
+    renderDefaultSlot(rec, it, b.id + '/' + it.id);
+    renderCoachSlot(rec, it); return; }
+
+  $('#reveal').classList.add('hidden');
+  $('#qcard').classList.remove('hidden');
+  const done = S.answers.filter(a => a.batch === b.id).length;
+  $('#qidx').textContent = `第 ${idx + 1} / ${b.items.length} 篇` + (done ? ` · 本批已答 ${done}` : '');
+  $('#qtitle').textContent = it.title;
+  $('#qabs').textContent = it.abstract;
+  $('#basis').value = '';
+  $('#defanswer').value = '';
+  $('#extra').value = '';
+  renderTiers(); renderTypes(); renderKnobs(); refreshSubmit();
+}
+
+function renderTiers(){
+  const box = $('#tiers'); box.innerHTML = '';
+  TORDER.forEach(t => {
+    const btn = document.createElement('button');
+    btn.textContent = TNAME[t];
+    if(Q.tier === t) btn.classList.add('on');
+    btn.onclick = () => { Q.tier = (Q.tier === t ? null : t); renderTiers(); refreshSubmit(); };
+    box.appendChild(btn);
+  });
+}
+function renderTypes(){
+  const box = $('#typesel'); box.innerHTML = '';
+  TYPES.forEach(t => {
+    const btn = document.createElement('button');
+    btn.textContent = t;
+    if(Q.type === t) btn.classList.add('on');
+    btn.onclick = () => { Q.type = (Q.type === t ? '' : t); renderTypes(); };
+    box.appendChild(btn);
+  });
+}
+function renderKnobs(){
+  const box = $('#knobs'); box.innerHTML = '';
+  [['n','创新性'],['i','重要性'],['e','证据强度']].forEach(([k, name]) => {
+    const row = document.createElement('div'); row.className = 'knob';
+    row.dataset.k = {n:'novelty', i:'importance', e:'evidence'}[k];
+    const nm = document.createElement('span'); nm.textContent = name; row.appendChild(nm);
+    const dots = document.createElement('div'); dots.className = 'dots';
+    for(let v = 1; v <= 5; v++){
+      const b = document.createElement('button');
+      b.textContent = v;
+      if(Q.knobs[k] === v) b.classList.add('on');
+      b.onclick = () => { Q.knobs[k] = (Q.knobs[k] === v ? 0 : v); renderKnobs(); };
+      dots.appendChild(b);
+    }
+    row.appendChild(dots); box.appendChild(row);
+  });
+}
+function refreshSubmit(){
+  $('#submit').disabled = !Q.tier;
+}
+$('#basis').addEventListener('input', refreshSubmit);
+
+/* ========== 提交 ========== */
+function submitAnswer(){
+  const b = curBatch(); if(!b) return;
+  const it = b.items[Q.idx];
+  if(!it || answered(b, it)) return;
+  const basis = $('#basis').value.trim();
+  if(!Q.tier) return;
+  const rec = {
+    date: new Date().toISOString().slice(0,10),
+    source: b.source || 'pubmed',
+    batch: b.id, id: it.id, pmid: it.pmid || '', key: it.key || '',
+    title: it.title, abstract: it.abstract,
+    journal: it.journal_name, ring: it.ring, actual_tier: it.tier,
+    pred_tier: Q.tier, delta: Q.tier - it.tier,
+    novelty: Q.knobs.n, importance: Q.knobs.i, evidence: Q.knobs.e,
+    basis: basis,
+    claim_type: Q.type, claim_sentence: '',
+    default_answer: $('#defanswer').value.trim(),
+    q_kind: Q.qkind ? Q.qkind.id : '',
+    q_label: Q.qkind ? Q.qkind.label : '',
+    extra_answer: $('#extra').value.trim(),
+    collections: it.collections || []
+  };
+  S.answers.push(rec); persist();
+  const key = b.id + '/' + it.id;
+  showReveal(rec, it);
+  mountChat(rec, it);
+  $('#coachbox').classList.remove('hidden');
+  $('#coachbox').innerHTML = '<div class="bt">评价与建议</div><div class="ln" style="color:#6b7785">生成中…</div>';
+  renderDefaultSlot(rec, it, key);
+  loadCoach(rec, it)
+    .then(() => { if(curKey() === key) renderCoachSlot(rec, it); })
+    .catch(e => {
+      if(curKey() !== key) return;
+      $('#coachbox').innerHTML = '<div class="bt">评价与建议</div>'
+        + '<div class="ln" style="color:#a11b1b">' + escapeHTML(e.message || e) + '</div>';
+    });
+}
+
+function showReveal(rec, it){
+  $('#qcard').classList.add('hidden');
+  $('#reveal').classList.remove('hidden');
+  if(!okRec(rec)){
+    $('#verdict').className = 'verdict';
+    $('#verdict').textContent = '旧版记录，没有档位判断';
+    $('#revj').textContent = `实际：${it.journal_name || '—'}（${TNAME[it.tier] || it.tier || '—'}）`;
+    $('#coachbox').classList.add('hidden');
+    $('#coachbox').innerHTML = '';
+    return;
+  }
+  const d = dl(rec);
+  let cls = 'ok', txt = '完全命中';
+  if(d > 0){ cls = 'under'; txt = `低估 ${d} 档`; }
+  if(d < 0){ cls = 'over'; txt = `高估 ${-d} 档`; }
+  $('#verdict').className = 'verdict ' + cls;
+  $('#verdict').textContent = `${txt}（你判 ${TNAME[rec.pred_tier]||rec.pred_tier}）`;
+  $('#revj').textContent = `实际：${it.journal_name}（${TNAME[it.tier]||it.tier} · ${it.ring}）`;
+  $('#coachbox').classList.add('hidden');
+  $('#coachbox').innerHTML = '';
+}
+
+$('#prev').onclick = () => gotoIdx(Q.idx - 1);
+$('#next').onclick = () => gotoIdx(Q.idx + 1);
+$('#batchsel').onchange = e => { S.last = e.target.value; persist(); renderPractice(); };
+$('#histfolder').addEventListener('change', renderHistory);
+$('#gen').onclick = async () => {
+  const btn = $('#gen'); btn.disabled = true;
+  try{ await generate(); }
+  catch(e){ $('#genlog').textContent = '生成失败：' + (e.message || e); }
+  finally{ btn.disabled = false; }
+};
+$('#submit').onclick = submitAnswer;
+
+/* ========== AI ========== */
+const COACH_SYS = '你是科研写作与投稿判断的教练。用户先自己判断了一篇论文的发表档位，答案已揭晓。'
+ + '你的任务分两部分：给出这篇文章的标准判断（供他学习），再评价他这次判断（指出偏差，不要夸奖）。\n'
+ + '档位口径（1最好、5最差）：1=CNS；2=大子刊；3=10分左右；4=5-10分；5=1-5分。\n'
+ + '三轴各1–5分：创新性=结论与该领域默认答案的距离（1基本重复已知；5改写默认答案）；'
+ + '重要性=受众面（1小众技术细节；5跨领域广泛关注）；证据强度=因果链闭合度（1相关性或单一模型；5判决性证据齐备）。'
+ + '档位按三项中最弱的一项定。\n'
+ + '规则：\n'
+ + '1. 只依据标题、摘要、用户填写的内容和实际期刊。不要假装看过全文或图。信息不足就直接说明，不要编。\n'
+ + '2. 实际期刊是事实锚点，但单篇受编辑偏好与运气影响。若摘要水平与实际期刊明显不匹配，要点明是哪一边异常。\n'
+ + '3. 标准主张句必须是一个可被反对的断言，不是主题复述。反例："本研究探讨了X在Y中的作用"；'
+ + '正例："X通过Z使Y失活，因此X缺失时Y持续激活"。\n'
+ + '4. 标准主张类型必须在六类中选一：描述/关联/因果/机制/规则·原则/资源·方法。'
+ + '判断依据是摘要实际支持到哪一层，不是作者的措辞。\n'
+ + '5. 每一条轴的评分都必须附摘要里的具体依据（哪一句、哪个实验），不要只写形容词。\n'
+ + '6. 评价用户时抓偏差来源：哪个轴判错、是因为读不出关键证据、高估新颖性、还是受众判断错。不要评文笔。\n'
+ + '7. 若用户写了主张句或选了类型，评价：能否被反对、量词与证据是否匹配、类型是否选对'
+ + '（摘要只支持关联却判成机制=选错）。未填写就写"未填写"。\n'
+ + '8. 规则要能用在下一次：写成"看到X就先查Y"这种可执行动作，不要写成感想或"要深入思考"。\n'
+ + '只输出严格JSON，不要代码块：\n'
+ + '{"headline":"一句话：偏差方向与主因",'
+ + '"std_claim":"标准主张句，不超过40字，可被反对",'
+ + '"std_type":"描述|关联|因果|机制|规则·原则|资源·方法",'
+ + '"std_tier":整数1-5,'
+ + '"why_tier":"2-4句：标准判断为什么是这一档，承重的是哪个轴",'
+ + '"axes":[{"axis":"创新性","yours":整数或null,"std":整数,"verdict":"判高/判低/接近/未填","comment":"1-2句，必须指出摘要里的具体依据"},'
+ + '{"axis":"重要性","yours":...},{"axis":"证据强度","yours":...}],'
+ + '"claim_review":"2-4句：用户的主张句与类型哪里对、哪里不对",'
+ + '"basis_review":"2-4句：依据抓住了什么、漏了什么",'
+ + '"rule":"一条可迁移规则，不超过30字，写成可执行动作",'
+ + '"next_time":"下次遇到这类文章先看什么，1-2句"}';
+
+async function chatJSON(system, user){
+  const st = S.settings;
+  if(!st.key) throw new Error('未配置AI密钥（设置页填写）');
+  const base = (st.base || 'https://api.deepseek.com/v1').replace(/\/+$/,'');
+  const r = await fetch(base + '/chat/completions', {
+    method:'POST',
+    headers:{'Content-Type':'application/json', 'Authorization':'Bearer ' + st.key},
+    body: JSON.stringify({
+      model: st.model || 'deepseek-chat',
+      messages:[{role:'system', content:system},{role:'user', content:user}],
+      temperature: 0.2,
+      response_format: {type:'json_object'}
+    })
+  });
+  let resp = r;
+  if(!r.ok && (r.status === 400 || r.status === 422)){
+    // 部分模型（如推理模型）不支持 temperature / response_format，去掉再试一次
+    resp = await fetch(base + '/chat/completions', {
+      method:'POST',
+      headers:{'Content-Type':'application/json', 'Authorization':'Bearer ' + st.key},
+      body: JSON.stringify({model: st.model || 'deepseek-chat',
+        messages:[{role:'system', content:system},{role:'user', content:user}]})
+    });
+  }
+  if(!resp.ok){
+    let e = '';
+    try{ e = await resp.text(); }catch(_){}
+    throw new Error('AI请求失败 HTTP ' + resp.status + (e ? '：' + e.slice(0, 200) : ''));
+  }
+  const d = await resp.json();
+  let t = (d.choices && d.choices[0] && d.choices[0].message.content || '').trim();
+  t = t.replace(/^```(?:json)?/i,'').replace(/```$/,'').trim();
+  try{ return JSON.parse(t); }
+  catch(e){ const m = t.match(/\{[\s\S]*\}/); if(m) return JSON.parse(m[0]); throw new Error('AI返回无法解析'); }
+}
+
+function clamp(v, lo, hi, dflt){
+  v = parseInt(v, 10);
+  if(isNaN(v)) return dflt;
+  return Math.max(lo, Math.min(hi, v));
+}
+function s(x, n){ return String(x == null ? '' : x).slice(0, n); }
+
+function coachKey(rec){ return rec.batch + '/' + rec.id + '/v2'; }
+
+function coachPrompt(rec, it){
+  const d = dl(rec);
+  return `标题：${it.title}
+摘要：${it.abstract}
+实际期刊：${it.journal_name}（档位 ${TNAME[it.tier]||it.tier} · ${it.ring}）
+用户判断的档位：${TNAME[rec.pred_tier]||rec.pred_tier}（${d>0?'低估':d<0?'高估':'命中'}${Math.abs(d)}档）
+用户三轴：创新性${rec.novelty||'未填'}、重要性${rec.importance||'未填'}、证据强度${rec.evidence||'未填'}
+用户判断的主张类型：${rec.claim_type || '（未填写）'}
+用户写的一句话（主张与依据）：${rec.basis || rec.claim_sentence || '（未填写）'}`;
+}
+
+async function loadCoach(rec, it){
+  const k = coachKey(rec);
+  if(S.coach[k]) return S.coach[k];
+  const out = await chatJSON(COACH_SYS, coachPrompt(rec, it));
+  const f = {
+    v: 2,
+    headline: s(out.headline, 200),
+    std_claim: s(out.std_claim, 240),
+    std_type: s(out.std_type, 20),
+    std_tier: clamp(out.std_tier, 1, 5, null),
+    why_tier: s(out.why_tier, 800),
+    axes: Array.isArray(out.axes) ? out.axes.slice(0,3).map((a, i) => ({
+      axis: s(a.axis, 20) || ['创新性','重要性','证据强度'][i],
+      yours: a.yours == null ? null : clamp(a.yours, 1, 5, null),
+      std: a.std == null ? null : clamp(a.std, 1, 5, null),
+      verdict: s(a.verdict, 10),
+      comment: s(a.comment, 400)
+    })) : [],
+    claim_review: s(out.claim_review, 600),
+    basis_review: s(out.basis_review, 600),
+    rule: s(out.rule, 60),
+    next_time: s(out.next_time, 400)
+  };
+  S.coach[k] = f; persist();
+  return f;
+}
+
+function coachHTML(f){
+  let h = '<div class="bt">评价与建议</div>';
+  if(f.headline) h += `<div class="ln"><b>${escapeHTML(f.headline)}</b></div>`;
+
+  h += '<div style="margin-top:10px;font-size:13px;color:#1f4e79;font-weight:600">标准判断</div>';
+  if(f.std_claim){
+    h += `<div class="dclaim"><b>${f.std_type ? '〔' + escapeHTML(f.std_type) + '〕' : ''}</b> `
+      + escapeHTML(f.std_claim) + '</div>';
+  }
+  if(f.std_tier) h += `<div class="ln">按摘要应为 <b>${TNAME[f.std_tier] || f.std_tier}</b></div>`;
+  if(f.why_tier) h += `<div class="ln">${escapeHTML(f.why_tier)}</div>`;
+  (f.axes || []).forEach(a => {
+    const cls = a.verdict === '判高' ? 'hi' : a.verdict === '判低' ? 'lo' : a.verdict === '接近' ? 'eq' : '';
+    h += `<div class="axisline"><span>${escapeHTML(a.axis)}</span>`
+      + (a.verdict ? `<span class="badge ${cls}">${escapeHTML(a.verdict)}</span>` : '')
+      + `<span style="font-size:12px;color:#6b7785">你 ${a.yours == null ? '未填' : a.yours} / 标准 ${a.std == null ? '-' : a.std}</span></div>`
+      + `<div style="font-size:13px;color:#4b5563;margin-bottom:6px">${escapeHTML(a.comment)}</div>`;
+  });
+
+  if(f.claim_review || f.basis_review){
+    h += '<div style="margin-top:10px;font-size:13px;color:#1f4e79;font-weight:600">对你的判断</div>';
+    if(f.claim_review) h += `<div class="ln"><b>主张句与类型：</b>${escapeHTML(f.claim_review)}</div>`;
+    if(f.basis_review) h += `<div class="ln"><b>依据：</b>${escapeHTML(f.basis_review)}</div>`;
+  }
+  if(f.rule || f.next_time){
+    h += '<div style="margin-top:10px;font-size:13px;color:#1f4e79;font-weight:600">可迁移</div>';
+    if(f.rule) h += `<div class="ln" style="color:#1f4e79">规则：${escapeHTML(f.rule)}</div>`;
+    if(f.next_time) h += `<div class="ln">${escapeHTML(f.next_time)}</div>`;
+  }
+  return h;
+}
+
+/* ---- 继续讨论 ---- */
+const CHAT_SYS = '你是科研写作与投稿判断的教练。下面给出用户正在练习的文章、他的作答和此前的评价。'
+  + '基于这些材料回答他的追问。\n规则：只依据给定材料，摘要里没有的不要编造；'
+  + '回答要具体，引用摘要原句或给出可执行的动作；不要重复已有评价里的结论；中文，简洁。';
+
+async function chatMulti(messages){
+  const st = S.settings;
+  if(!st.key) throw new Error('未配置AI密钥（设置页填写）');
+  const base = (st.base || 'https://api.deepseek.com/v1').replace(/\/+$/,'');
+  const r = await fetch(base + '/chat/completions', {
+    method:'POST',
+    headers:{'Content-Type':'application/json', 'Authorization':'Bearer ' + st.key},
+    body: JSON.stringify({model: st.model || 'deepseek-chat', messages,
+      temperature: 0.4, max_tokens: 1200})
+  });
+  if(!r.ok){
+    let t = '';
+    try{ t = await r.text(); }catch(_){}
+    throw new Error('AI请求失败 HTTP ' + r.status + (t ? '：' + t.slice(0, 200) : ''));
+  }
+  const d = await r.json();
+  return ((d.choices && d.choices[0] && d.choices[0].message.content) || '').trim();
+}
+
+function chatContext(rec, it){
+  const f = S.coach[coachKey(rec)] || {};
+  const L = [`标题：${it.title}`, '', `摘要：${it.abstract}`, '',
+    `实际发表：${it.journal_name}（${TNAME[it.tier] || it.tier}）`,
+    `用户判断：${TNAME[rec.pred_tier] || rec.pred_tier}（${rec.delta === 0 ? '命中' : '有偏差'}）`];
+  if(rec.basis) L.push(`用户的依据：${rec.basis}`);
+  if(rec.claim_type) L.push(`用户的主张类型：${rec.claim_type}`);
+  if(f.std_claim) L.push('', `此前的标准判断：${f.std_claim}（类型：${f.std_type || ''}）`,
+    `档位理由：${f.why_tier || ''}`);
+  return CHAT_SYS + '\n\n' + L.join('\n');
+}
+
+function mountChat(rec, it){
+  const box = $('#reveal');
+  const div = document.createElement('div');
+  div.className = 'box';
+  div.id = 'chatbox';
+  div.innerHTML = `<div class="bt">继续讨论</div>
+    <div id="chatlog" style="max-height:300px;overflow:auto"></div>
+    <textarea id="chatin" rows="2" placeholder="就这篇文章或你这次的判断追问，例如「这条证据为什么不够判决性」" style="margin-top:8px"></textarea>
+    <button id="chatsend" class="small ghost" style="margin-top:8px">发送</button>`;
+  box.appendChild(div);
+  renderChat(rec, it);
+  $('#chatsend').onclick = () => sendChat(rec, it);
+}
+
+function renderChat(rec, it){
+  const log = $('#chatlog'); if(!log) return;
+  const h = (S.chat && S.chat[coachKey(rec)]) || [];
+  log.innerHTML = h.length
+    ? h.map(m => `<div style="margin:6px 0;font-size:13.5px;line-height:1.7;white-space:pre-wrap;
+        ${m.role === 'assistant' ? 'background:#f8fafc;border-radius:8px;padding:8px 10px;color:#3c4650' : 'color:#1f4e79'}">
+        <span style="font-size:11.5px;color:#6b7785;display:block">${m.role === 'assistant' ? '教练' : '我'}</span>
+        ${escapeHTML(m.content)}</div>`).join('')
+    : '<div style="font-size:13px;color:#6b7785">可以就这篇文章或你这次的判断继续追问。</div>';
+  log.scrollTop = log.scrollHeight;
+}
+
+async function sendChat(rec, it){
+  const ta = $('#chatin'), btn = $('#chatsend');
+  if(!ta || !btn) return;
+  const text = ta.value.trim(); if(!text) return;
+  const k = coachKey(rec);
+  S.chat = S.chat || {};
+  S.chat[k] = S.chat[k] || [];
+  S.chat[k].push({role:'user', content:text});
+  ta.value = ''; renderChat(rec, it); persist();
+  btn.disabled = true; btn.textContent = '思考中…';
+  try{
+    const reply = await chatMulti([{role:'system', content: chatContext(rec, it)}]
+      .concat(S.chat[k].slice(-12)));
+    S.chat[k].push({role:'assistant', content: reply});
+  }catch(e){
+    S.chat[k].push({role:'assistant', content:'（出错）' + e.message});
+  }
+  persist(); renderChat(rec, it);
+  btn.disabled = false; btn.textContent = '发送';
+}
+
+function renderCoachSlot(rec, it){
+  const box = $('#coachbox');
+  box.classList.remove('hidden');
+  const f = S.coach[coachKey(rec)];
+  if(f){ box.innerHTML = coachHTML(f); return; }
+  box.innerHTML = '<div class="bt">评价与建议</div>'
+    + '<div class="ln" style="color:#6b7785">这条还没有生成评价</div>'
+    + '<button class="cbtn small ghost" style="margin-top:6px">生成</button>';
+  const btn = box.querySelector('.cbtn');
+  btn.onclick = async () => {
+    btn.disabled = true; btn.textContent = '生成中…';
+    try{
+      await loadCoach(rec, it);
+      if(box.isConnected) renderCoachSlot(rec, it);
+    }catch(e){
+      box.innerHTML = '<div class="bt">评价与建议</div>'
+        + '<div class="ln" style="color:#a11b1b">' + escapeHTML(e.message || e) + '</div>';
+    }
+  };
+}
+
+
+/* ========== 领域默认核对 ========== */
+const DEF_SYS = '你是科研写作教练。给你同一子领域的若干篇摘要，以及用户写的一句"这个领域的默认答案"。\n'
+ + '任务：\n'
+ + '1. local_default：只用这些摘要，归纳它们共同默认的模型，一句话，不超过40字；若摘要不足以归纳，写"不足以归纳"。\n'
+ + '2. textbook：凭你训练知识，说出该领域通行的默认说法，一句话，不超过40字。\n'
+ + '3. same：local_default 与 textbook 是否实质一致（true/false）。\n'
+ + '4. divergence：若不一致，一句话说明差异在哪；一致则写空字符串。\n'
+ + '5. fit：用户写的默认答案与 local_default 相比，缺了什么或多说了什么，一句话，不超过40字。\n'
+ + '规则：不要编造摘要里没有的内容；只输出JSON，不要代码块：\n'
+ + '{"local_default":"","textbook":"","same":true,"divergence":"","fit":""}';
+
+function pickSimilar(it, pool, n){
+  const toks = s => new Set(String(s||'').toLowerCase().match(/[a-z]{4,}/g) || []);
+  const mine = toks(it.title);
+  const cols = new Set(it.collections || []);
+  return pool.map(x => {
+    let sc = 0;
+    (x.collections||[]).forEach(c => { if(cols.has(c)) sc += 3; });
+    const t2 = toks(x.title);
+    mine.forEach(w => { if(t2.has(w)) sc += 1; });
+    return {x, sc};
+  }).sort((a,b)=>b.sc-a.sc).slice(0, n).map(o=>o.x);
+}
+
+async function buildDefaultReview(rec, it){
+  const bank = await bankGet();
+  const items = ((bank && bank.items) || []).filter(x => x.key !== it.key && x.abstract);
+  const cols = it.collections || [];
+  let pool = cols.length ? items.filter(x => (x.collections||[]).some(c => cols.includes(c))) : [];
+  if(pool.length < 5) pool = items;
+  const picked = pickSimilar(it, pool, 8);
+  if(!picked.length) throw new Error('题库里没有可比对的文章');
+  const corpus = picked.map((x,i)=>`[${i+1}] ${x.title}\n${(x.abstract||'').slice(0,700)}`).join('\n\n');
+  const out = await chatJSON(DEF_SYS,
+    `用户写的默认答案：${rec.default_answer || '（未填写）'}\n\n同一子领域的 ${picked.length} 篇摘要：\n\n${corpus}`);
+  out.sources = picked.map(x => x.title);
+  out.n = picked.length;
+  return out;
+}
+
+function ensureDefBox(){
+  let box = $('#defbox');
+  if(!box){
+    box = document.createElement('div');
+    box.id = 'defbox';
+    box.className = 'box';
+    const cb = $('#coachbox');
+    $('#reveal').insertBefore(box, cb);
+  }
+  box.classList.remove('hidden');
+  return box;
+}
+
+function defaultHTML(r, rec){
+  let h = '<div class="bt">领域默认</div>';
+  h += `<div class="ln"><b>你写的：</b>${escapeHTML(rec.default_answer || '（未填）')}</div>`;
+  h += `<div class="ln"><b>库内${r.n}篇归纳：</b>${escapeHTML(r.local_default || '—')}</div>`;
+  if(r.same){
+    h += `<div class="ln" style="color:#6b7785">教科书版本：一致</div>`;
+  }else{
+    h += `<div class="ln"><b>教科书版本：</b>${escapeHTML(r.textbook || '—')}</div>`;
+    if(r.divergence) h += `<div class="ln" style="color:#b45309">${escapeHTML(r.divergence)}</div>`;
+  }
+  if(r.fit) h += `<div class="ln" style="color:#4b5563">与你的句子相比：${escapeHTML(r.fit)}</div>`;
+  h += `<div class="note" style="margin-top:6px">依据：${(r.sources||[]).map(escapeHTML).join('；')}</div>`;
+  return h;
+}
+
+async function renderDefaultSlot(rec, it, key){
+  const box = ensureDefBox();
+  S.defaults = S.defaults || {};
+  if(S.defaults[key]){ box.innerHTML = defaultHTML(S.defaults[key], rec); return; }
+  box.innerHTML = '<div class="bt">领域默认</div><div class="ln" style="color:#6b7785">正在用你库里的同领域文章归纳…</div>';
+  try{
+    const r = await buildDefaultReview(rec, it);
+    S.defaults[key] = r; persist();
+    if(curKey() === key) box.innerHTML = defaultHTML(r, rec);
+  }catch(e){
+    if(curKey() === key)
+      box.innerHTML = '<div class="bt">领域默认</div><div class="ln" style="color:#a11b1b">' + escapeHTML(e.message || e) + '</div>';
+  }
+}
+
+/* ========== 历史 ========== */
+function renderHistory(){
+  let all = S.answers.slice().reverse();
+  const hf = $('#histfolder');
+  if(hf){
+    const cnt = {};
+    all.forEach(a => (a.collections || []).forEach(c => { cnt[c] = (cnt[c]||0)+1; }));
+    const cur = hf.value;
+    hf.innerHTML = '<option value="">全部</option>' + Object.entries(cnt)
+      .sort((a,b)=>b[1]-a[1]).map(([c,v]) =>
+        `<option value="${escapeHTML(c)}">${escapeHTML(c)}（${v}）</option>`).join('');
+    hf.value = cur;
+    if(cur) all = all.filter(a => (a.collections || []).includes(cur));
+  }
+  const n = all.length;
+  const V = all.filter(okRec), m = V.length;
+  const exact = V.filter(a => dl(a) === 0).length;
+  const one = V.filter(a => Math.abs(dl(a)) === 1).length;
+  const off = m - exact - one;
+  const pc = x => m ? Math.round(x/m*100) + '%' : '—';
+  $('#hsum').innerHTML = n
+    ? `共 <b>${n}</b> 篇 · 完全命中 <b>${exact}</b>（${pc(exact)}） · 偏差1档 <b>${one}</b>（${pc(one)}）`
+      + ` · <span style="color:#a11b1b">偏差≥2档 <b>${off}</b>（${pc(off)}）</span>`
+      + (m < n ? `<div style="font-size:12px;color:#6b7785;margin-top:6px">另有 ${n - m} 篇档位数据缺失，未计入统计。</div>` : '')
+    : '还没有作答记录。';
+
+  const list = $('#hlist'); list.innerHTML = '';
+
+  const addRow = a => {
+    const good = okRec(a);
+    const d = good ? dl(a) : null;
+    const row = document.createElement('div');
+    row.className = 'hrow';
+    const col = !good ? '#6b7785' : d === 0 ? '#1a7f4b' : d > 0 ? '#2f6fa8' : '#b45309';
+    row.innerHTML = `<span class="m">${a.date} · ${a.batch}/${a.id}</span>`
+      + `<span style="flex:1"></span>`
+      + (good
+          ? `<span>判${TNAME[a.pred_tier]||a.pred_tier} / 实${TNAME[a.actual_tier]||a.actual_tier}</span>`
+            + `<span style="color:${col};font-weight:600">${d === 0 ? '命中' : d > 0 ? '低估' : '高估'}</span>`
+          : `<span>实${TNAME[a.actual_tier]||a.actual_tier||'—'}</span>`
+            + `<span style="color:${col}">旧版·不计分</span>`);
+    const det = document.createElement('div');
+    det.className = 'hdetail hidden';
+    const paint = () => {
+      try{ det.innerHTML = histDetail(a); }
+      catch(e){ det.innerHTML = `<div class="dmeta" style="color:#a11b1b">该条记录渲染失败：${e.message||e}</div>`; return; }
+      const btn = det.querySelector('.cbtn');
+      if(!btn) return;
+      btn.onclick = async ev => {
+        ev.stopPropagation();
+        btn.disabled = true; btn.textContent = '生成中…';
+        const it = {title: a.title, abstract: a.abstract, pmid: a.pmid,
+          journal_name: a.journal, tier: a.actual_tier, ring: a.ring};
+        try{ await loadCoach(a, it); paint(); }
+        catch(e){ btn.disabled = false; btn.textContent = '生成'; btn.insertAdjacentText('afterend', ' 失败：' + (e.message || e)); }
+      };
+    };
+    paint();
+    row.onclick = () => det.classList.toggle('hidden');
+    list.appendChild(row); list.appendChild(det);
+  };
+
+  [['PubMed', all.filter(a => (a.source || 'pubmed') !== 'zotero')],
+   ['Zotero库', all.filter(a => a.source === 'zotero')]].forEach(([title, rows]) => {
+    if(!rows.length) return;
+    const hd = document.createElement('div');
+    hd.className = 'note';
+    hd.style.cssText = 'padding:14px 4px 6px;font-size:13px;color:#1f4e79;font-weight:600';
+    hd.textContent = `${title}（${rows.length} 条）`;
+    list.appendChild(hd);
+    rows.forEach(addRow);
+  });
+
+  if(all.length){
+    const foot = document.createElement('div');
+    foot.className = 'note';
+    foot.style.padding = '10px 4px';
+    foot.textContent = `以上共 ${all.length} 条记录`;
+    list.appendChild(foot);
+  }
+}
+
+function histDetail(a){
+  let h = `<div class="dmeta">${a.journal} · ${TNAME[a.actual_tier]||a.actual_tier} · ${a.ring}</div>`;
+  h += `<div><b>${escapeHTML(a.title||'')}</b></div>`;
+  h += `<div style="font-size:13px;color:#6b7785;margin:6px 0">你的三轴：创新性${a.novelty||'-'} · 重要性${a.importance||'-'} · 证据强度${a.evidence||'-'}</div>`;
+  if(a.basis) h += `<div style="font-size:13px;margin:4px 0"><b>依据：</b>${escapeHTML(a.basis)}</div>`;
+  if(a.claim_sentence || a.claim_type){
+    h += `<div class="dclaim"><b>${a.claim_type ? '〔'+a.claim_type+'〕' : ''}</b> ${escapeHTML(a.claim_sentence||'')}</div>`;
+  }
+  if(a.abstract) h += `<div style="font-size:13px;line-height:1.65;color:#3b4550;margin:8px 0">${escapeHTML(a.abstract)}</div>`;
+  const f = S.coach[coachKey(a)];
+  h += '<div class="box">' + (f ? coachHTML(f)
+    : `<div class="bt">评价与建议</div><div class="ln" style="color:#6b7785">未生成</div><button class="cbtn small ghost" style="margin-top:6px">生成</button>`) + '</div>';
+  return h;
+}
+function escapeHTML(x){ return String(x||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* ========== 分析 ========== */
+let STAT_SRC = 'pubmed';
+
+function srcBar(){
+  return '<div style="display:flex;gap:8px;margin-bottom:14px">'
+    + ['pubmed','zotero'].map(s => `<button class="srcbtn" data-src="${s}"
+        style="flex:1;padding:8px;font-size:13px;border-radius:8px;border:1px solid #e3e8ee;
+        background:${s === STAT_SRC ? '#1f4e79' : '#fff'};color:${s === STAT_SRC ? '#fff' : '#1c2128'}">
+        ${s === 'pubmed' ? 'PubMed' : 'Zotero库'}</button>`).join('') + '</div>';
+}
+function bindSrcBar(){
+  $$('#anpanel .srcbtn').forEach(b => {
+    b.onclick = () => { STAT_SRC = b.dataset.src; renderStats(); };
+  });
+}
+
+function renderStats(){
+  const A = S.answers.filter(a => (a.source || 'pubmed') === STAT_SRC);
+  if(!A.length){
+    $('#anpanel').innerHTML = srcBar() + `<div style="color:#6b7785">${STAT_SRC === 'zotero' ? 'Zotero库' : 'PubMed'} 还没有记录。</div>`;
+    bindSrcBar(); return;
+  }
+  const m = {};
+  TORDER.forEach(p => { m[p] = {}; TORDER.forEach(a2 => m[p][a2] = 0); });
+  A.forEach(a => { if(m[a.pred_tier] && m[a.pred_tier][a.actual_tier] !== undefined) m[a.pred_tier][a.actual_tier]++; });
+  const pairs = {};
+  A.forEach(a => { const d = dl(a); if(d) { const k = (TNAME[a.pred_tier]||a.pred_tier)+'→'+(TNAME[a.actual_tier]||a.actual_tier); pairs[k]=(pairs[k]||0)+1; } });
+  const top = Object.entries(pairs).sort((x,y)=>y[1]-x[1])[0];
+
+  let h = '';
+  const V = A.filter(okRec), nv = V.length;
+  const ex = V.filter(a=>dl(a)===0).length, on = V.filter(a=>Math.abs(dl(a))===1).length;
+  h += `<div style="font-size:14px;margin-bottom:6px">共 ${A.length} 篇：完全命中 ${ex} · 偏差1档 ${on} · 偏差≥2档 ${nv-ex-on}${nv<A.length?`（${A.length-nv}篇数据缺失未计）`:''}</div>`;
+  if(top) h += `<div style="font-size:13px;color:#4b5563;margin-bottom:10px">最常见误判：${top[0]}（${top[1]}次）</div>`;
+
+  h += '<table class="mtx"><tr><th>预测＼实际</th>' + TORDER.map(t=>`<th>${TNAME[t]}</th>`).join('') + '</tr>';
+  for(const p of TORDER){
+    h += `<tr><th>${TNAME[p]}</th>`;
+    for(const a2 of TORDER){
+      const v = m[p][a2];
+      const bg = v ? `rgba(31,78,121,${Math.min(0.12 + v/Math.max(1,A.length)*0.9, .85)})` : '#fff';
+      const col = v && v/Math.max(1,A.length) > .25 ? '#fff' : '#1c2128';
+      h += `<td class="${p===a2?'diag':''}" style="background:${bg};color:${col}">${v||''}</td>`;
+    }
+    h += '</tr>';
+  }
+  h += '</table>';
+
+  // 三轴（与评价里的标准评分对比）
+  const axes = [['novelty','创新性'],['importance','重要性'],['evidence','证据强度']];
+  h += '<div style="margin-top:16px;font-size:14px"><b>三轴偏移</b>（你 − 标准）</div>';
+  axes.forEach(([k, name], i) => {
+    const diffs = [];
+    A.forEach(a => {
+      if(!a[k]) return;
+      const f = S.coach[coachKey(a)];
+      const ax = f && Array.isArray(f.axes) ? f.axes[i] : null;
+      if(!ax || ax.std == null) return;
+      diffs.push(a[k] - ax.std);
+    });
+    if(!diffs.length){ h += `<div style="font-size:13px;color:#6b7785;margin-top:6px">${name}：暂无标准评分可对比</div>`; return; }
+    const mean = diffs.reduce((x,y)=>x+y,0)/diffs.length;
+    const hi = diffs.filter(d=>d>0).length, lo = diffs.filter(d=>d<0).length;
+    h += `<div style="font-size:13px;margin-top:6px">${name}：平均 ${mean>0?'+':''}${mean.toFixed(2)} · 判高 ${hi} · 判低 ${lo} · 一致 ${diffs.length-hi-lo}（n=${diffs.length}）</div>`;
+  });
+
+  // 趋势
+  if(A.length >= 10){
+    h += '<div style="margin-top:16px;font-size:14px"><b>每10篇完全命中率</b></div><div class="trend">';
+    for(let i = 0; i < A.length; i += 10){
+      const chunk = A.slice(i, i+10);
+      const rate = chunk.filter(a=>dl(a)===0).length / chunk.length;
+      h += `<div style="height:${Math.round(rate*70)+4}px"><span>${Math.round(rate*100)}%</span></div>`;
+    }
+    h += '</div>';
+  } else {
+    h += `<div style="margin-top:14px;font-size:13px;color:#6b7785">满10篇后显示趋势。</div>`;
+  }
+  h += `<div style="margin-top:14px;font-size:12px;color:#6b7785">参考基线：5档随机猜完全命中20%、±1档内52%。</div>`;
+  $('#anpanel').innerHTML = srcBar() + h;
+  bindSrcBar();
+}
+$('#anbtn').onclick = renderStats;
+
+/* ========== 设置 ========== */
+function renderSettings(){
+  $('#apikey').value = S.settings.key || '';
+  $('#aibase').value = S.settings.base || 'https://api.deepseek.com/v1';
+  $('#aimodel').value = S.settings.model || 'deepseek-chat';
+  bankGet().then(b => {
+    $('#bankstat').textContent = (b && b.items && b.items.length)
+      ? `已导入 ${b.items.length} 篇${b.built ? '（构建于 ' + b.built + '）' : ''}`
+      : '未导入题库。未导入时「Zotero库」来源不可用。';
+  }).catch(() => { $('#bankstat').textContent = '读取题库失败'; });
+}
+
+$('#bankimport').onclick = () => $('#bankfile').click();
+$('#bankfile').onchange = async e => {
+  const f = e.target.files[0]; if(!f) return;
+  try{
+    const d = JSON.parse(await f.text());
+    if(!d || !Array.isArray(d.items)) throw new Error('不是 zotero_bank.json 格式');
+    await bankPut(d);
+    await migrateBatches();
+    await populateFolders();
+    renderSettings();
+    renderPractice();
+    alert(`已导入 ${d.items.length} 篇`);
+  }catch(err){ alert('导入失败：' + err.message); }
+  e.target.value = '';
+};
+$('#bankclear').onclick = async () => {
+  if(!confirm('清空已导入的 Zotero 题库？作答记录不受影响。')) return;
+  await bankClear(); renderSettings();
+};
+
+$('#source').onchange = () => {
+  const z = $('#source').value === 'zotero';
+  $('#daysLab').classList.toggle('hidden', z);
+};
+$('#savecfg').onclick = () => {
+  S.settings.key = $('#apikey').value.trim();
+  S.settings.base = $('#aibase').value.trim() || 'https://api.deepseek.com/v1';
+  S.settings.model = $('#aimodel').value.trim() || 'deepseek-chat';
+  persist();
+  $('#cfglog').textContent = '已保存。';
+};
+
+$('#exportbtn').onclick = () => {
+  const blob = new Blob([JSON.stringify(S, null, 1)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'tier-practice-' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  $('#datalog').textContent = '已导出。';
+};
+$('#importbtn').onclick = () => $('#importfile').click();
+$('#importfile').onchange = async e => {
+  const f = e.target.files[0]; if(!f) return;
+  try{
+    const d = JSON.parse(await f.text());
+    let added = 0;
+    (d.batches || []).forEach(b => {
+      if(!S.batches.some(x => x.id === b.id)){ S.batches.push(b); added++; }
+    });
+    (d.answers || []).forEach(a => {
+      if(!S.answers.some(x => x.batch === a.batch && x.id === a.id)){ S.answers.push(a); added++; }
+    });
+    Object.assign(S.judgments, d.judgments || {});
+    Object.assign(S.coach, d.coach || {});
+    S.batches.sort((x,y) => (y.id > x.id ? 1 : -1));
+    if(!S.last && S.batches[0]) S.last = S.batches[0].id;
+    persist();
+    $('#datalog').textContent = `导入完成，新增 ${added} 条记录。`;
+    renderPractice();
+  }catch(err){ $('#datalog').textContent = '导入失败：' + err.message; }
+};
+
+/* ========== 启动 ========== */
+(async () => {
+  await migrateBatches();     // 旧版批次补 journal_name/tier/collections
+  await populateFolders();
+  renderPractice();
+  if(location.hash){
+    const t = location.hash.slice(1);
+    if(['practice','history','stats','settings'].includes(t)) showTab(t);
+  }
+})();
+</script>
+</body>
+</html>
