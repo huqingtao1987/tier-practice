@@ -816,6 +816,8 @@ const COACH_SYS = '你是科研写作与投稿判断的教练。用户先自己�
  + '7. 若用户写了主张句或选了类型，评价：能否被反对、量词与证据是否匹配、类型是否选对'
  + '（摘要只支持关联却判成机制=选错）。未填写就写"未填写"。\n'
  + '8. 规则要能用在下一次：写成"看到X就先查Y"这种可执行动作，不要写成感想或"要深入思考"。\n'
+ + '9. 用户可能额外回答了一个补充问题。若有，先评价这一条（extra_review）；没答就写"未回答"。\n'
+ + '10. 五个补充问题列在用户消息里。除用户已回答的那一个之外，其余每个都用一句话给出你的回答（extra_answers），不要展开成段。\n'
  + '只输出严格JSON，不要代码块：\n'
  + '{"headline":"一句话：偏差方向与主因",'
  + '"std_claim":"标准主张句，不超过40字，可被反对",'
@@ -827,39 +829,80 @@ const COACH_SYS = '你是科研写作与投稿判断的教练。用户先自己�
  + '"claim_review":"2-4句：用户的主张句与类型哪里对、哪里不对",'
  + '"basis_review":"2-4句：依据抓住了什么、漏了什么",'
  + '"rule":"一条可迁移规则，不超过30字，写成可执行动作",'
+ + '"extra_review":"2-3句：评价用户的补充回答；未回答写未回答",'
+ + '"extra_answers":[{"q":"问题","a":"一句话回答"}],'
  + '"next_time":"下次遇到这类文章先看什么，1-2句"}';
 
-async function chatJSON(system, user){
+async function apiFetch(url, opts, {timeout=120000, retries=2}={}){
+  let lastErr;
+  for(let i = 0; i <= retries; i++){
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeout);
+    try{
+      const r = await fetch(url, {...opts, signal: ctrl.signal});
+      clearTimeout(timer);
+      if(r.status === 429 || r.status >= 500){
+        let body = ''; try{ body = await r.text(); }catch(_){}
+        lastErr = new Error('AI请求失败 HTTP ' + r.status + (body ? '：' + body.slice(0, 200) : ''));
+        if(i < retries){ await sleep(1500 * (i + 1)); continue; }
+        throw lastErr;
+      }
+      return r;
+    }catch(e){
+      clearTimeout(timer);
+      lastErr = (e && e.name === 'AbortError')
+        ? new Error('请求超时（' + Math.round(timeout/1000) + '秒），网络可能不稳定，请重试')
+        : e;
+      if(i < retries){ await sleep(1500 * (i + 1)); continue; }
+      throw lastErr;
+    }
+  }
+  throw lastErr;
+}
+
+async function callChat(opts){
   const st = S.settings;
   if(!st.key) throw new Error('未配置AI密钥（设置页填写）');
   const base = (st.base || 'https://api.deepseek.com/v1').replace(/\/+$/,'');
-  const r = await fetch(base + '/chat/completions', {
-    method:'POST',
-    headers:{'Content-Type':'application/json', 'Authorization':'Bearer ' + st.key},
-    body: JSON.stringify({
-      model: st.model || 'deepseek-chat',
-      messages:[{role:'system', content:system},{role:'user', content:user}],
+  const headers = {'Content-Type':'application/json', 'Authorization':'Bearer ' + st.key};
+  const msgs = opts.system
+    ? [{role:'system', content:opts.system}].concat(opts.messages)
+    : opts.messages;
+  const budget = opts.maxTokens || 4000;
+  let last = null;
+
+  for(const mt of [budget, Math.min(budget * 2, 16000)]){
+    let body = JSON.stringify({
+      model: st.model || 'deepseek-chat', messages: msgs, max_tokens: mt,
       temperature: 0.2,
-      response_format: {type:'json_object'}
-    })
-  });
-  let resp = r;
-  if(!r.ok && (r.status === 400 || r.status === 422)){
-    // 部分模型（如推理模型）不支持 temperature / response_format，去掉再试一次
-    resp = await fetch(base + '/chat/completions', {
-      method:'POST',
-      headers:{'Content-Type':'application/json', 'Authorization':'Bearer ' + st.key},
-      body: JSON.stringify({model: st.model || 'deepseek-chat',
-        messages:[{role:'system', content:system},{role:'user', content:user}]})
+      ...(opts.json ? {response_format:{type:'json_object'}} : {})
     });
+    let r = await apiFetch(base + '/chat/completions', {method:'POST', headers, body},
+                           {timeout: 180000});
+
+    // 个别模型不支持 temperature / response_format，去掉再试
+    if(!r.ok && (r.status === 400 || r.status === 422)){
+      body = JSON.stringify({model: st.model || 'deepseek-chat', messages: msgs, max_tokens: mt});
+      r = await apiFetch(base + '/chat/completions', {method:'POST', headers, body},
+                         {timeout: 180000});
+    }
+    if(!r.ok){
+      let e = ''; try{ e = await r.text(); }catch(_){}
+      throw new Error('AI请求失败 HTTP ' + r.status + (e ? '：' + e.slice(0, 200) : ''));
+    }
+    const d = await r.json();
+    const ch = (d.choices && d.choices[0]) || {};
+    const txt = ((ch.message && ch.message.content) || '').trim();
+    if(txt) return txt;
+    last = ch;   // 正文为空：多半是推理把 token 预算吃光了，换更大预算再试
   }
-  if(!resp.ok){
-    let e = '';
-    try{ e = await resp.text(); }catch(_){}
-    throw new Error('AI请求失败 HTTP ' + resp.status + (e ? '：' + e.slice(0, 200) : ''));
-  }
-  const d = await resp.json();
-  let t = (d.choices && d.choices[0] && d.choices[0].message.content || '').trim();
+  throw new Error('模型没有返回内容'
+    + (last && last.finish_reason === 'length'
+       ? '（推理过程占满了 token 预算，已自动加倍仍不够，请稍后重试或换模型）' : ''));
+}
+
+async function chatJSON(system, user){
+  let t = await callChat({system, messages:[{role:'user', content:user}], json:true, maxTokens:4000});
   t = t.replace(/^```(?:json)?/i,'').replace(/```$/,'').trim();
   try{ return JSON.parse(t); }
   catch(e){ const m = t.match(/\{[\s\S]*\}/); if(m) return JSON.parse(m[0]); throw new Error('AI返回无法解析'); }
@@ -882,7 +925,13 @@ function coachPrompt(rec, it){
 用户判断的档位：${TNAME[rec.pred_tier]||rec.pred_tier}（${d>0?'低估':d<0?'高估':'命中'}${Math.abs(d)}档）
 用户三轴：创新性${rec.novelty||'未填'}、重要性${rec.importance||'未填'}、证据强度${rec.evidence||'未填'}
 用户判断的主张类型：${rec.claim_type || '（未填写）'}
-用户写的一句话（主张与依据）：${rec.basis || rec.claim_sentence || '（未填写）'}`;
+用户写的一句话（主张与依据）：${rec.basis || rec.claim_sentence || '（未填写）'}
+用户写的领域默认答案：${rec.default_answer || '（未填写）'}
+${rec.extra_answer
+  ? `用户选的补充问题：${rec.q_label || ''}\n用户的回答：${rec.extra_answer}`
+  : '用户没有回答补充问题'}
+五个补充问题：
+${QKINDS.map((k,i) => `${i+1}. ${k.label}——${k.hint}`).join('\n')}`;
 }
 
 async function loadCoach(rec, it){
@@ -906,7 +955,12 @@ async function loadCoach(rec, it){
     claim_review: s(out.claim_review, 600),
     basis_review: s(out.basis_review, 600),
     rule: s(out.rule, 60),
-    next_time: s(out.next_time, 400)
+    next_time: s(out.next_time, 400),
+    extra_review: s(out.extra_review, 600),
+    extra_answers: Array.isArray(out.extra_answers)
+      ? out.extra_answers.slice(0,6).map(x => ({q: s(x && x.q, 60), a: s(x && x.a, 300)}))
+        .filter(x => x.q && x.a)
+      : []
   };
   S.coach[k] = f; persist();
   return f;
@@ -936,6 +990,13 @@ function coachHTML(f){
     if(f.claim_review) h += `<div class="ln"><b>主张句与类型：</b>${escapeHTML(f.claim_review)}</div>`;
     if(f.basis_review) h += `<div class="ln"><b>依据：</b>${escapeHTML(f.basis_review)}</div>`;
   }
+  if(f.extra_review || (f.extra_answers && f.extra_answers.length)){
+    h += '<div style="margin-top:10px;font-size:13px;color:#1f4e79;font-weight:600">补充问题</div>';
+    if(f.extra_review) h += `<div class="ln"><b>你的回答：</b>${escapeHTML(f.extra_review)}</div>`;
+    (f.extra_answers || []).forEach(x => {
+      h += `<div class="ln" style="margin-top:6px"><b>${escapeHTML(x.q)}</b><br>${escapeHTML(x.a)}</div>`;
+    });
+  }
   if(f.rule || f.next_time){
     h += '<div style="margin-top:10px;font-size:13px;color:#1f4e79;font-weight:600">可迁移</div>';
     if(f.rule) h += `<div class="ln" style="color:#1f4e79">规则：${escapeHTML(f.rule)}</div>`;
@@ -950,22 +1011,7 @@ const CHAT_SYS = '你是科研写作与投稿判断的教练。下面给出用�
   + '回答要具体，引用摘要原句或给出可执行的动作；不要重复已有评价里的结论；中文，简洁。';
 
 async function chatMulti(messages){
-  const st = S.settings;
-  if(!st.key) throw new Error('未配置AI密钥（设置页填写）');
-  const base = (st.base || 'https://api.deepseek.com/v1').replace(/\/+$/,'');
-  const r = await fetch(base + '/chat/completions', {
-    method:'POST',
-    headers:{'Content-Type':'application/json', 'Authorization':'Bearer ' + st.key},
-    body: JSON.stringify({model: st.model || 'deepseek-chat', messages,
-      temperature: 0.4, max_tokens: 1200})
-  });
-  if(!r.ok){
-    let t = '';
-    try{ t = await r.text(); }catch(_){}
-    throw new Error('AI请求失败 HTTP ' + r.status + (t ? '：' + t.slice(0, 200) : ''));
-  }
-  const d = await r.json();
-  return ((d.choices && d.choices[0] && d.choices[0].message.content) || '').trim();
+  return await callChat({messages, json:false, maxTokens:4000});
 }
 
 function chatContext(rec, it){
@@ -1119,6 +1165,11 @@ function defaultHTML(r, rec){
 
 async function renderDefaultSlot(rec, it, key){
   const box = ensureDefBox();
+  if(!rec.default_answer){
+    box.innerHTML = '<div class="bt">领域默认</div><div class="ln" style="color:#6b7785">'
+      + '这次没写默认答案，已跳过同领域归纳。展开「补充记录」填写后会生成。</div>';
+    return;
+  }
   S.defaults = S.defaults || {};
   if(S.defaults[key]){ box.innerHTML = defaultHTML(S.defaults[key], rec); return; }
   box.innerHTML = '<div class="bt">领域默认</div><div class="ln" style="color:#6b7785">正在用你库里的同领域文章归纳…</div>';
