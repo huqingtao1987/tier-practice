@@ -134,7 +134,7 @@ footer{text-align:center;font-size:12px;color:var(--mute);padding:18px 12px}
     <h2 id="qtitle"></h2>
     <div class="abs" id="qabs"></div>
 
-    <div class="lab">主张类型（可选）</div>
+    <div class="lab">文章类型（可选）</div>
     <div id="typesel" class="chips"></div>
 
     <div id="tierBlock">
@@ -719,7 +719,7 @@ function renderQSel(){
 
 function renderKnobs(){
   const box = $('#knobs'); box.innerHTML = '';
-  [['n','创新性'],['i','重要性'],['e','证据强度']].forEach(([k, name]) => {
+  [['e','证据强度'],['n','创新性'],['i','重要性']].forEach(([k, name]) => {
     const row = document.createElement('div'); row.className = 'knob';
     row.dataset.k = {n:'novelty', i:'importance', e:'evidence'}[k];
     const nm = document.createElement('span'); nm.textContent = name; row.appendChild(nm);
@@ -821,11 +821,14 @@ const COACH_SYS = '你是科研写作与投稿判断的教练。用户先自己�
  + '三轴各按同一套五档打分，分值与档位一一对应：1=1-5分水平，2=5-10分水平，3=10分水平，4=大子刊水平，5=CNS水平。'
  + '创新性：1-5分水平=结论在该领域已基本重复过；CNS水平=改写了领域默认答案。'
  + '重要性：1-5分水平=小众技术细节；CNS水平=跨领域广泛关注。'
- + '证据强度这一轴量什么，取决于本文类型，评之前先判类型：'
- + '研究论文（提出因果或机制主张）——量因果链闭合度：1-5分水平=相关性或单一模型，CNS水平=判决性证据齐备；'
- + '资源·图谱——量覆盖完整性与可复用性：1-5分水平=局部样本或内部使用，CNS水平=成为领域标准资源；'
- + '方法·平台——量相对现有方法的优势与适用边界是否成立；'
- + '临床·转化——量证据等级（样本量、终点、偏倚控制）。'
+ + '证据强度这一轴量什么，取决于文章类型，评之前先判类型：'
+ + '描述——数据质量、代表性、可重复性；'
+ + '关联——关联是否稳健（样本量、混杂控制、独立重复）；'
+ + '因果——因果链是否闭合（干预、替代解释是否排除）；'
+ + '机制——中间环节是否被逐一证明；'
+ + '规则·原则——跨体系一致性与反例处理；'
+ + '资源·方法——覆盖、性能、可用性。'
+ + '任何一类都能拿到5分（CNS水平），满分的含义随类型不同：关联型不需要机制证据，只看关联本身是否站得住。'
  + '创新性与重要性的定义不随类型变。'
  + '用户给某一轴打5，意思是"这一轴已达到CNS水平"，不是"这篇文章是CNS"。'
  + '定档规则不变：三轴取最弱的一项。评价时说明本文按哪类尺子、哪一轴是瓶颈。'
@@ -842,7 +845,7 @@ const COACH_SYS = '你是科研写作与投稿判断的教练。用户先自己�
  + '不要写"第1档""3档"这类数字。\n'
  + '3. 标准主张句必须是一个可被反对的断言，不是主题复述。反例："本研究探讨了X在Y中的作用"；'
  + '正例："X通过Z使Y失活，因此X缺失时Y持续激活"。\n'
- + '4. 标准主张类型必须在六类中选一：描述/关联/因果/机制/规则·原则/资源·方法。'
+ + '4. 标准文章类型必须在六类中选一：描述/关联/因果/机制/规则·原则/资源·方法。'
  + '判断依据是摘要实际支持到哪一层，不是作者的措辞。\n'
  + '5. 每一条轴的评分都必须附摘要里的具体依据（哪一句、哪个实验），不要只写形容词。\n'
  + '6. 评价用户时抓偏差来源：哪个轴判错、是因为读不出关键证据、高估新颖性、还是受众判断错。不要评文笔。\n'
@@ -852,14 +855,13 @@ const COACH_SYS = '你是科研写作与投稿判断的教练。用户先自己�
  + '9. 用户可能额外回答了一个补充问题。若有，先评价这一条（extra_review）；没答就写"未回答"。\n'
  + '10. 五个补充问题列在用户消息里。除用户已回答的那一个之外，其余每个都用一句话给出你的回答（extra_answers），不要展开成段。\n'
  + '只输出严格JSON，不要代码块：\n'
- + '{"paper_type":"研究|资源·图谱|方法·平台|临床·转化",'
- + '"headline":"一句话：偏差方向与主因",'
+ + '{"headline":"一句话：偏差方向与主因",'
  + '"std_claim":"标准主张句，不超过40字，可被反对",'
  + '"std_type":"描述|关联|因果|机制|规则·原则|资源·方法",'
  + '"why_tier":"2-4句：为什么这篇落在实际期刊对应的那一档，承重的是哪个轴",'
  + '"axes":[{"axis":"创新性","yours":整数或null,"std":整数,"verdict":"判高/判低/接近/未填","comment":"1-2句，必须指出摘要里的具体依据"},'
  + '{"axis":"重要性","yours":...},{"axis":"证据强度","yours":...}],'
- + '"claim_review":"2-4句：用户的主张句与类型哪里对、哪里不对",'
+ + '"type_call":"你判的类型：X；用户判的是：Y；依据一句话（一致就写一致）","claim_review":"2-4句：用户的主张句哪里对、哪里不对",'
  + '"basis_review":"2-4句：依据抓住了什么、漏了什么",'
  + '"rule":"一条可迁移规则，不超过30字，写成可执行动作",'
  + '"extra_review":"2-3句：评价用户的补充回答；未回答写未回答",'
@@ -959,7 +961,7 @@ function coachPrompt(rec, it){
 本文类型：${isReview(it) ? '综述（无原始数据）' : '研究论文'}
 用户判断的档位：${TNAME[rec.pred_tier]||rec.pred_tier}（${d>0?'低估':d<0?'高估':'命中'}${Math.abs(d)}档）
 用户三轴：创新性${rec.novelty||'未填'}、重要性${rec.importance||'未填'}、证据强度${rec.evidence||'未填'}
-用户判断的主张类型：${rec.claim_type || '（未填写）'}
+用户判断的文章类型：${rec.claim_type || '（未填写）'}
 用户写的一句话（主张与依据）：${rec.basis || rec.claim_sentence || '（未填写）'}
 用户写的领域默认答案：${rec.default_answer || '（未填写）'}
 ${rec.extra_answer
@@ -975,7 +977,7 @@ async function loadCoach(rec, it){
   const out = await chatJSON(COACH_SYS, coachPrompt(rec, it));
   const f = {
     v: 2,
-    paper_type: s(out.paper_type, 20),
+    type_call: s(out.type_call, 200),
     headline: s(out.headline, 200),
     std_claim: s(out.std_claim, 240),
     std_type: s(out.std_type, 20),
@@ -1012,7 +1014,7 @@ function coachHTML(f){
       + escapeHTML(f.std_claim) + '</div>';
   }
   if(f.std_tier) h += `<div class="ln">标准档位 <b>${TNAME[f.std_tier] || f.std_tier}</b>（以实际发表期刊为准）</div>`;
-  if(f.paper_type) h += `<div class="ln" style="color:#6b7785">本文类型 ${escapeHTML(f.paper_type)}（证据强度按该类标准评）</div>`;
+  if(f.type_call) h += `<div class="ln" style="color:#6b7785">类型判断：${escapeHTML(f.type_call)}</div>`;
   if(f.why_tier) h += `<div class="ln">${escapeHTML(f.why_tier)}</div>`;
   (f.axes || []).forEach(a => {
     const cls = a.verdict === '判高' ? 'hi' : a.verdict === '判低' ? 'lo' : a.verdict === '接近' ? 'eq' : '';
