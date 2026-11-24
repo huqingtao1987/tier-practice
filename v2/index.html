@@ -854,7 +854,7 @@ const COACH_SYS = '你是科研写作与投稿判断的教练。用户先自己�
  + '8. 规则要能用在下一次：写成"看到X就先查Y"这种可执行动作，不要写成感想或"要深入思考"。\n'
  + '9. 用户可能额外回答了一个补充问题。若有，先评价这一条（extra_review）；没答就写"未回答"。\n'
  + '10. 五个补充问题列在用户消息里。除用户已回答的那一个之外，其余每个都用一句话给出你的回答（extra_answers），不要展开成段。\n'
- + '只输出严格JSON，不要代码块：\n'
+ + '只输出严格JSON，不要代码块。字符串内部不要使用英文双引号，需要引用时用中文引号「」。\n'
  + '{"headline":"一句话：偏差方向与主因",'
  + '"std_claim":"标准主张句，不超过40字，可被反对",'
  + '"std_type":"描述|关联|因果|机制|规则·原则|资源·方法",'
@@ -895,6 +895,17 @@ async function apiFetch(url, opts, {timeout=120000, retries=2}={}){
   throw lastErr;
 }
 
+function parseJSONLoose(t){
+  let str = String(t || '').trim()
+    .replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+  try{ return JSON.parse(str); }catch(e){}
+  const i = str.indexOf('{'), j = str.lastIndexOf('}');
+  if(i >= 0 && j > i){
+    try{ return JSON.parse(str.slice(i, j + 1)); }catch(e){}
+  }
+  return null;
+}
+
 async function callChat(opts){
   const st = S.settings;
   if(!st.key) throw new Error('未配置AI密钥（设置页填写）');
@@ -903,12 +914,18 @@ async function callChat(opts){
   const msgs = opts.system
     ? [{role:'system', content:opts.system}].concat(opts.messages)
     : opts.messages;
-  const budget = opts.maxTokens || 4000;
-  let last = null;
+  const first = opts.maxTokens || 4000;
+  const budgets = [first, Math.min(first * 2, 12000), 16000].filter((v, i, a) => a.indexOf(v) === i);
+  let lastTxt = '', lastFinish = null;
 
-  for(const mt of [budget, Math.min(budget * 2, 16000)]){
+  for(const mt of budgets){
+    // 上一次拿到了内容但不是合法 JSON：追加一句纠正再试
+    const useMsgs = (lastTxt && opts.check)
+      ? msgs.concat([{role:'user', content:'上一次输出不是合法的JSON（可能被截断，或字符串内用了英文双引号）。'
+        + '请重新输出，只给JSON，字符串内不要出现英文双引号。'}])
+      : msgs;
     let body = JSON.stringify({
-      model: st.model || 'deepseek-chat', messages: msgs, max_tokens: mt,
+      model: st.model || 'deepseek-chat', messages: useMsgs, max_tokens: mt,
       temperature: 0.2,
       ...(opts.json ? {response_format:{type:'json_object'}} : {})
     });
@@ -917,7 +934,7 @@ async function callChat(opts){
 
     // 个别模型不支持 temperature / response_format，去掉再试
     if(!r.ok && (r.status === 400 || r.status === 422)){
-      body = JSON.stringify({model: st.model || 'deepseek-chat', messages: msgs, max_tokens: mt});
+      body = JSON.stringify({model: st.model || 'deepseek-chat', messages: useMsgs, max_tokens: mt});
       r = await apiFetch(base + '/chat/completions', {method:'POST', headers, body},
                          {timeout: 180000});
     }
@@ -928,19 +945,29 @@ async function callChat(opts){
     const d = await r.json();
     const ch = (d.choices && d.choices[0]) || {};
     const txt = ((ch.message && ch.message.content) || '').trim();
-    if(txt) return txt;
-    last = ch;   // 正文为空：多半是推理把 token 预算吃光了，换更大预算再试
+    lastFinish = ch.finish_reason;
+    if(!txt) continue;                       // 预算被思维链吃光
+    if(!opts.check) return txt;
+    if(opts.check(txt)) return txt;          // JSON 合法
+    lastTxt = txt;                           // 有内容但不是合法 JSON，换更大预算再试
+  }
+
+  if(lastTxt){
+    throw new Error('AI返回的JSON不完整或含未转义引号（'
+      + (lastFinish === 'length' ? '输出被截断' : '格式错误') + '，已放大预算重试仍失败）');
   }
   throw new Error('模型没有返回内容'
-    + (last && last.finish_reason === 'length'
-       ? '（推理过程占满了 token 预算，已自动加倍仍不够，请稍后重试或换模型）' : ''));
+    + (lastFinish === 'length' ? '（推理过程占满 token 预算，请稍后重试或换模型）' : ''));
 }
 
 async function chatJSON(system, user){
-  let t = await callChat({system, messages:[{role:'user', content:user}], json:true, maxTokens:4000});
-  t = t.replace(/^```(?:json)?/i,'').replace(/```$/,'').trim();
-  try{ return JSON.parse(t); }
-  catch(e){ const m = t.match(/\{[\s\S]*\}/); if(m) return JSON.parse(m[0]); throw new Error('AI返回无法解析'); }
+  const txt = await callChat({
+    system, messages:[{role:'user', content:user}], json:true, maxTokens:6000,
+    check: t => !!parseJSONLoose(t)
+  });
+  const obj = parseJSONLoose(txt);
+  if(!obj) throw new Error('AI返回无法解析');
+  return obj;
 }
 
 function clamp(v, lo, hi, dflt){
