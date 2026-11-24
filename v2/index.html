@@ -144,7 +144,7 @@ footer{text-align:center;font-size:12px;color:var(--mute);padding:18px 12px}
 
     <div class="lab">三轴（可选）</div>
     <div id="knobs"></div>
-    <div class="note" style="margin-top:-2px">1=1-5分水平 · 3=10分水平 · 5=CNS水平；最终档位按最弱一轴定</div>
+    <div class="note" style="margin-top:-2px">1=1-5分水平 · 3=10分水平 · 5=CNS水平；最终档位按最弱一轴定（证据强度的标准随文章类型变）</div>
 
     <details id="morepanel" style="margin-top:16px">
       <summary style="cursor:pointer;font-size:14px;color:var(--blue)">补充记录（默认答案 / 主张 / 补充问题）</summary>
@@ -821,9 +821,14 @@ const COACH_SYS = '你是科研写作与投稿判断的教练。用户先自己�
  + '三轴各按同一套五档打分，分值与档位一一对应：1=1-5分水平，2=5-10分水平，3=10分水平，4=大子刊水平，5=CNS水平。'
  + '创新性：1-5分水平=结论在该领域已基本重复过；CNS水平=改写了领域默认答案。'
  + '重要性：1-5分水平=小众技术细节；CNS水平=跨领域广泛关注。'
- + '证据强度：1-5分水平=相关性或单一模型；CNS水平=判决性证据齐备。'
+ + '证据强度这一轴量什么，取决于本文类型，评之前先判类型：'
+ + '研究论文（提出因果或机制主张）——量因果链闭合度：1-5分水平=相关性或单一模型，CNS水平=判决性证据齐备；'
+ + '资源·图谱——量覆盖完整性与可复用性：1-5分水平=局部样本或内部使用，CNS水平=成为领域标准资源；'
+ + '方法·平台——量相对现有方法的优势与适用边界是否成立；'
+ + '临床·转化——量证据等级（样本量、终点、偏倚控制）。'
+ + '创新性与重要性的定义不随类型变。'
  + '用户给某一轴打5，意思是"这一轴已达到CNS水平"，不是"这篇文章是CNS"。'
- + '最终档位由三轴中最弱的一项决定。'
+ + '定档规则不变：三轴取最弱的一项。评价时说明本文按哪类尺子、哪一轴是瓶颈。'
  + '档位按三项中最弱的一项定。\n'
  + '规则：\n'
  + '0. 用户在作答时看不到期刊名，只有标题和摘要。评价时必须站在"他只有摘要"的立场，检查他的推理是否由摘要证据支撑；'
@@ -847,7 +852,8 @@ const COACH_SYS = '你是科研写作与投稿判断的教练。用户先自己�
  + '9. 用户可能额外回答了一个补充问题。若有，先评价这一条（extra_review）；没答就写"未回答"。\n'
  + '10. 五个补充问题列在用户消息里。除用户已回答的那一个之外，其余每个都用一句话给出你的回答（extra_answers），不要展开成段。\n'
  + '只输出严格JSON，不要代码块：\n'
- + '{"headline":"一句话：偏差方向与主因",'
+ + '{"paper_type":"研究|资源·图谱|方法·平台|临床·转化",'
+ + '"headline":"一句话：偏差方向与主因",'
  + '"std_claim":"标准主张句，不超过40字，可被反对",'
  + '"std_type":"描述|关联|因果|机制|规则·原则|资源·方法",'
  + '"why_tier":"2-4句：为什么这篇落在实际期刊对应的那一档，承重的是哪个轴",'
@@ -942,7 +948,7 @@ function clamp(v, lo, hi, dflt){
 }
 function s(x, n){ return String(x == null ? '' : x).slice(0, n); }
 
-function coachKey(rec){ return rec.batch + '/' + rec.id + '/v3'; }
+function coachKey(rec){ return rec.batch + '/' + rec.id + '/v4'; }
 
 function coachPrompt(rec, it){
   const d = dl(rec);
@@ -969,6 +975,7 @@ async function loadCoach(rec, it){
   const out = await chatJSON(COACH_SYS, coachPrompt(rec, it));
   const f = {
     v: 2,
+    paper_type: s(out.paper_type, 20),
     headline: s(out.headline, 200),
     std_claim: s(out.std_claim, 240),
     std_type: s(out.std_type, 20),
@@ -1005,6 +1012,7 @@ function coachHTML(f){
       + escapeHTML(f.std_claim) + '</div>';
   }
   if(f.std_tier) h += `<div class="ln">标准档位 <b>${TNAME[f.std_tier] || f.std_tier}</b>（以实际发表期刊为准）</div>`;
+  if(f.paper_type) h += `<div class="ln" style="color:#6b7785">本文类型 ${escapeHTML(f.paper_type)}（证据强度按该类标准评）</div>`;
   if(f.why_tier) h += `<div class="ln">${escapeHTML(f.why_tier)}</div>`;
   (f.axes || []).forEach(a => {
     const cls = a.verdict === '判高' ? 'hi' : a.verdict === '判低' ? 'lo' : a.verdict === '接近' ? 'eq' : '';
