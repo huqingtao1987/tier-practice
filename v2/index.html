@@ -228,7 +228,7 @@ footer{text-align:center;font-size:12px;color:var(--mute);padding:18px 12px}
   </div>
 
   <div class="card" style="font-size:13px;color:var(--mute)">
-    档位口径（按钮从左到右）：1-5分 · 5-10分 · 10分 · 大子刊 · CNS。内部1最好、5最差。<br>
+    档位（由低到高）：1-5分 · 5-10分 · 10分 · 大子刊 · CNS。<br>
     三轴：创新性＝与领域默认答案的距离；重要性＝受众面；证据强度＝因果链闭合度。按最弱项定档。
   </div>
 </section>
@@ -814,7 +814,9 @@ $('#submit').onclick = submitAnswer;
 /* ========== AI ========== */
 const COACH_SYS = '你是科研写作与投稿判断的教练。用户先自己判断了一篇论文的发表档位，答案已揭晓。'
  + '你的任务分两部分：给出这篇文章的标准判断（供他学习），再评价他这次判断（指出偏差，不要夸奖）。\n'
- + '档位口径（1最好、5最差）：1=CNS；2=大子刊；3=10分左右；4=5-10分；5=1-5分。\n'
+ + '档位从高到低排列：CNS > 大子刊 > 10分 > 5-10分 > 1-5分。'
+ + '用户选的档位、你的判断、以及评价中的表述，都只能使用这五个名称。'
+ + '不要把档位换算成数字，也不要写"第几档"。\n'
  + '三轴各1–5分：创新性=结论与该领域默认答案的距离（1基本重复已知；5改写默认答案）；'
  + '重要性=受众面（1小众技术细节；5跨领域广泛关注）；证据强度=因果链闭合度（1相关性或单一模型；5判决性证据齐备）。'
  + '档位按三项中最弱的一项定。\n'
@@ -822,7 +824,8 @@ const COACH_SYS = '你是科研写作与投稿判断的教练。用户先自己�
  + '0. 用户在作答时看不到期刊名，只有标题和摘要。评价时必须站在"他只有摘要"的立场，检查他的推理是否由摘要证据支撑；'
  + '禁止出现"你应该知道这本刊""你既然知道发表在X"这类假设。\n'
  + '1. 只依据标题、摘要和用户填写的内容给出标准判断，之后才对照实际期刊；不要先看答案再倒推理由。\n'
- + '2. 实际期刊是事实锚点，但单篇受编辑偏好与运气影响。若摘要水平与实际期刊明显不匹配，要点明是哪一边异常。\n'
+ + '2. 标准档位以实际发表期刊对应的档位为准，你不要给出另一个档位。'
+ + '你的任务是在这个档位的前提下解释它为什么成立；若摘要水平与实际期刊明显不匹配，单独用一句话点明。\n'
  + '2b. 若本文是综述（标题或刊物显示为review/trends/current opinion等）：证据强度按"覆盖是否完整、是否处理反例"评，'
  + '不要求原始数据；创新性看它提出的组织框架是否新，而不是有没有新实验。\n'
  + '2c. 全文提到档位时一律用名称：1-5分 / 5-10分 / 10分 / 大子刊 / CNS。'
@@ -842,8 +845,7 @@ const COACH_SYS = '你是科研写作与投稿判断的教练。用户先自己�
  + '{"headline":"一句话：偏差方向与主因",'
  + '"std_claim":"标准主张句，不超过40字，可被反对",'
  + '"std_type":"描述|关联|因果|机制|规则·原则|资源·方法",'
- + '"std_tier":"CNS|大子刊|10分|5-10分|1-5分",'
- + '"why_tier":"2-4句：标准判断为什么是这一档，承重的是哪个轴",'
+ + '"why_tier":"2-4句：为什么这篇落在实际期刊对应的那一档，承重的是哪个轴",'
  + '"axes":[{"axis":"创新性","yours":整数或null,"std":整数,"verdict":"判高/判低/接近/未填","comment":"1-2句，必须指出摘要里的具体依据"},'
  + '{"axis":"重要性","yours":...},{"axis":"证据强度","yours":...}],'
  + '"claim_review":"2-4句：用户的主张句与类型哪里对、哪里不对",'
@@ -935,7 +937,7 @@ function clamp(v, lo, hi, dflt){
 }
 function s(x, n){ return String(x == null ? '' : x).slice(0, n); }
 
-function coachKey(rec){ return rec.batch + '/' + rec.id + '/v2'; }
+function coachKey(rec){ return rec.batch + '/' + rec.id + '/v3'; }
 
 function coachPrompt(rec, it){
   const d = dl(rec);
@@ -965,9 +967,7 @@ async function loadCoach(rec, it){
     headline: s(out.headline, 200),
     std_claim: s(out.std_claim, 240),
     std_type: s(out.std_type, 20),
-    std_tier: (typeof out.std_tier === 'string')
-      ? (NAME2T[String(out.std_tier).trim()] || null)
-      : clamp(out.std_tier, 1, 5, null),
+    std_tier: it.tier || null,
     why_tier: s(out.why_tier, 800),
     axes: Array.isArray(out.axes) ? out.axes.slice(0,3).map((a, i) => ({
       axis: s(a.axis, 20) || ['创新性','重要性','证据强度'][i],
@@ -999,7 +999,7 @@ function coachHTML(f){
     h += `<div class="dclaim"><b>${f.std_type ? '〔' + escapeHTML(f.std_type) + '〕' : ''}</b> `
       + escapeHTML(f.std_claim) + '</div>';
   }
-  if(f.std_tier) h += `<div class="ln">按摘要应为 <b>${TNAME[f.std_tier] || f.std_tier}</b></div>`;
+  if(f.std_tier) h += `<div class="ln">标准档位 <b>${TNAME[f.std_tier] || f.std_tier}</b>（以实际发表期刊为准）</div>`;
   if(f.why_tier) h += `<div class="ln">${escapeHTML(f.why_tier)}</div>`;
   (f.axes || []).forEach(a => {
     const cls = a.verdict === '判高' ? 'hi' : a.verdict === '判低' ? 'lo' : a.verdict === '接近' ? 'eq' : '';
